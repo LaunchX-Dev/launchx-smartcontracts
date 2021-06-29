@@ -82,7 +82,7 @@ contract Staking is Ownable {
         require(block.timestamp >= lock_start, Errors.DEPOSIT_BEFORE_START);
         require(block.timestamp <= lock_end, Errors.DEPOSIT_AFTER_END);
         require(token == lnx_address || token == lnxp_address, Errors.TOKEN_MUST_BE_LNX_OR_LNXP);
-        userTokenDeposit[_msgSender()][token] += amount;
+        userTokenDeposit[_msgSender()][token] += amount;  // todo discuss saveGas with msg.sender if no meta-tx
         emit Deposit(_msgSender(), token, amount);
         IERC20(token).safeTransferFrom(_msgSender(), address(this), amount);  // todo deflationary token
     }
