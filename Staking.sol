@@ -59,7 +59,8 @@ contract Staking is Ownable {
         lock_end = _lock_end;
     }
 
-    // If there is a problem with the contract, it should be possible to return tokens (to the specified address) parameters - token address, recipient address and quantity
+    // If there is a problem with the contract, it should be possible to return tokens (to the specified address)
+    // parameters - token address, recipient address and quantity
     function emergencyWithdrawal(address token, address recipient, uint256 quantity) external onlyOwner {
         require(recipient != address(0), Errors.ZERO_ADDRESS);
         require(token == lnx_address || token == lnxp_address, Errors.TOKEN_MUST_BE_LNX_OR_LNXP);
@@ -79,7 +80,7 @@ contract Staking is Ownable {
     */
     function depositToken(address token, uint256 amount) external {
         require(block.timestamp >= lock_start, Errors.DEPOSIT_BEFORE_START);
-        require(block.timestamp <= lock_start, Errors.DEPOSIT_AFTER_END);
+        require(block.timestamp <= lock_end, Errors.DEPOSIT_AFTER_END);
         require(token == lnx_address || token == lnxp_address, Errors.TOKEN_MUST_BE_LNX_OR_LNXP);
         userTokenDeposit[_msgSender()][token] += amount;
         emit Deposit(_msgSender(), token, amount);
