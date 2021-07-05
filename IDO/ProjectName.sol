@@ -152,16 +152,16 @@ contract VerifySignature{
 }
 
 
-contract IDOSalesSC is AdminRole, VerifySignature{
+contract ProjectName is AdminRole, VerifySignature{
   using SafeMath for uint256;
 
-  event SaleInfo(address indexed signer, uint256 coinsvalue, uint256 tokensvalue, uint256 holder_max_project_tokens, uint256 allowed_coinsvalue, uint256 allowed_tokensvalue);
+  event TokensaleInfo(address indexed signer, uint256 coinsvalue, uint256 tokensvalue, uint256 holder_max_project_tokens, uint256 allowed_coinsvalue, uint256 allowed_tokensvalue);
 
   // sales status id
-  uint8 private _sale_status;
+  uint8 private _tokensale_status;
 
-  address public coin_token_address;
-  Token_interface private _coin_token;
+  address public currency_token_address;
+  Token_interface private _currency_token;
 
   address public project_token_address;
   Token_interface private _project_token;
@@ -177,7 +177,7 @@ contract IDOSalesSC is AdminRole, VerifySignature{
   constructor () public {
 
     // set the sales status id as: "disabled
-    _sale_status = 2;
+    _tokensale_status = 2;
 
     //set the sale price for 1 token
     _token_price = 100000000000000000; //0.10 USDT * (10**18) = 100000000000000000 wei, where 18 is decimal of USDT
@@ -185,11 +185,11 @@ contract IDOSalesSC is AdminRole, VerifySignature{
     // set the address that stores Tokens and signs data from the white list
     _signer_address = address(0xb9FDFCb83dD73d1d8d0EdCa62B3eAC14acCCDD60);
 
-    // set the address of the USDT smart contract
-    // Token Tether (USDT) address is 0xdAC17F958D2ee523a2206206994597C13D831ec7
+    // set the address of a currency smart contract
+    // e.g. Token Tether (USDT) address is 0xdAC17F958D2ee523a2206206994597C13D831ec7
     // mainnet url https://etherscan.io/token/0xdac17f958d2ee523a2206206994597c13d831ec7
-    coin_token_address = address(0x74321312E77534E8bABBA368dba9De73e150F1A6);
-    _coin_token = Token_interface(coin_token_address);
+    currency_token_address = address(0x74321312E77534E8bABBA368dba9De73e150F1A6);
+    _currency_token = Token_interface(currency_token_address);
     
     // set the address of the smart contract of the project token
     project_token_address = address(0x0CAa60FB124fF9542C1bDA0db35C1807021fF97b);
@@ -203,11 +203,11 @@ contract IDOSalesSC is AdminRole, VerifySignature{
 
   // returns the current sales status
   function saleStatus() public view returns(string memory){
-    if(_sale_status == 0){
+    if(_tokensale_status == 0){
       return "Closed";
-    }else if(_sale_status == 1){
+    }else if(_tokensale_status == 1){
       return "Active";
-    }else if(_sale_status == 2){
+    }else if(_tokensale_status == 2){
       return "Disabled";
     }
     return "Unknown"; //impossible
@@ -219,7 +219,7 @@ contract IDOSalesSC is AdminRole, VerifySignature{
   }
 
   // this method allows admin of the smart contract to withdraw tokens
-  // from smart contract. This can be done before or after closeSales()
+  // from smart contract. This can be done before or after stopTokensale()
   function tokenWithdrawal(address token_address, address recipient, uint256 value) public onlyOwnerOrAdmin {
     require(checkValidMultiSignatures(), "There is no required number of signatures");
 
@@ -230,18 +230,18 @@ contract IDOSalesSC is AdminRole, VerifySignature{
   }
 
   // this method allows admin of the smart contract to withdraw USDT
-  // from smart contract. This can be done before or after closeSales()
+  // from smart contract. This can be done before or after stopTokensale()
   function USDTWithdrawal(address recipient, uint256 value) public onlyOwnerOrAdmin {
-    tokenWithdrawal(coin_token_address, recipient, value);
+    tokenWithdrawal(currency_token_address, recipient, value);
   }
 
   // get price of 1 token in USDT
-  function getPrice() public view returns(uint256){
+  function getTokenPrice() public view returns(uint256){
     return _token_price;
   }
 
   // Total tokens sold to specified address.
-  function totalSoldByAddress(address holder) public view returns(uint256){
+  function totalTokensSoldByAddress(address holder) public view returns(uint256){
     return _sold_amounts[holder];
   }
 
@@ -256,7 +256,7 @@ contract IDOSalesSC is AdminRole, VerifySignature{
   }
   
   // Get the number of participants that have purchased more than 0 tokens.
-  function countParticipants() public view returns(uint256){
+  function getNumberOfParticipants() public view returns(uint256){
     return _participants.length;
   }
 
@@ -267,7 +267,7 @@ contract IDOSalesSC is AdminRole, VerifySignature{
       // to buy stated amount of tokens.
     require(checkValidMultiSignatures(), "There is no required number of signatures");
 
-    require(_sale_status > 0, "Sales closed");
+    require(_tokensale_status > 0, "Sales closed");
 
     _signer_address = signer;
     
@@ -298,7 +298,7 @@ contract IDOSalesSC is AdminRole, VerifySignature{
   // for USDT. 
   function tokenPurchase(uint256 require_token_value, uint256 holder_max_project_tokens, bytes memory signature) public{
     // check that sales are open
-    require(_sale_status==1, "Sales are not allowed");
+    require(_tokensale_status==1, "Sales are not allowed");
     require(require_token_value > 0, "The requested amount of tokens for purchase must be greater than 0 (zero)");
 
     address sender = _msgSender();
@@ -307,14 +307,14 @@ contract IDOSalesSC is AdminRole, VerifySignature{
     require(checkEligibility(sender, require_token_value, holder_max_project_tokens, signature), "Customer limited by max value");
     
     // calculate the price for the specified purchase tokens value
-    uint256 topay_value = require_token_value.mul(_token_price).div(10**_coin_token.decimals());
+    uint256 topay_value = require_token_value.mul(_token_price).div(10**_currency_token.decimals());
 
     // check customer USDT balance
-    uint256 c_value = _coin_token.balanceOf(sender);
+    uint256 c_value = _currency_token.balanceOf(sender);
     require(c_value >= topay_value, "The customer does not have enough USDT balance");
 
     // check allowed USDT value for transfer from the customer
-    c_value = _coin_token.allowance(sender, address(this));
+    c_value = _currency_token.allowance(sender, address(this));
     require(c_value >= topay_value, "Smart contact is not entitled to such an USDT amount");
 
     // check the balance of project tokens for sale
@@ -326,10 +326,10 @@ contract IDOSalesSC is AdminRole, VerifySignature{
     require(p_value >= require_token_value, "Smart contact is not entitled to such a project token amount");
 
     // write information about purchase to events
-    emit SaleInfo(_signer_address, topay_value, require_token_value, holder_max_project_tokens, c_value, p_value);
+    emit TokensaleInfo(_signer_address, topay_value, require_token_value, holder_max_project_tokens, c_value, p_value);
 
     // withdraw USDT from the customer
-    require(_coin_token.transferFrom(sender, address(this), topay_value), "USDT withdrawal error");
+    require(_currency_token.transferFrom(sender, address(this), topay_value), "USDT withdrawal error");
     // transfer project tokens to the customer
     require(_project_token.transferFrom(_signer_address, sender, require_token_value), "Project Token transfer error");
 
@@ -350,9 +350,9 @@ contract IDOSalesSC is AdminRole, VerifySignature{
 
     require(checkValidMultiSignatures(), "There is no required number of signatures");
 
-    require(_sale_status > 0, "Sales is close");
+    require(_tokensale_status > 0, "Sales is close");
 
-    _sale_status = 2;
+    _tokensale_status = 2;
 
     cancelAllMultiSignatures();
   }
@@ -363,9 +363,9 @@ contract IDOSalesSC is AdminRole, VerifySignature{
 
     require(checkValidMultiSignatures(), "There is no required number of signatures");
 
-    require(_sale_status > 0, "Sales is close");
+    require(_tokensale_status > 0, "Sales is close");
 
-    _sale_status = 1;
+    _tokensale_status = 1;
 
     cancelAllMultiSignatures();
   }
@@ -375,14 +375,14 @@ contract IDOSalesSC is AdminRole, VerifySignature{
   // This can not be reverted. If there are unsold tokens they will remain with the
   // original holder of the tokens that issued allowence for this contract to 
   // sell them.
-  function closeSales() public onlyOwnerOrAdmin{
+  function stopTokensale() public onlyOwnerOrAdmin{
     require(checkValidMultiSignatures(), "There is no required number of signatures");
 
     // reset the address of the signature and the holder of the tokens for sale
     _signer_address = address(0);
 
     // set the sales status index to "Closed"
-    _sale_status = 0;
+    _tokensale_status = 0;
   }
 
 }
