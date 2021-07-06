@@ -19,7 +19,7 @@ contract AdminRole is Context, Ownable {
     address[] private _signatures;
 
     modifier onlyAdmin() {
-        require(isAdmin(_msgSender()), "AdminRole: you don�t have permissions to call this method");
+        require(isAdmin(_msgSender()), "AdminRole: you don't have permissions to call this method");
         _;
     }
 
@@ -280,7 +280,7 @@ contract ProjectName is AdminRole, VerifySignature{
     // The msg.sender has the right to purchase the remaining amount of tokens. This takes into account the
     // previously purchased tokens. 
     require(verify(_signer_address, holder, holder_max_project_tokens, signature), "The incoming data have been incorrectly signed");
-    uint256 c = totalSoldByAddress(holder);
+    uint256 c = totalTokensSoldByAddress(holder);
     return holder_max_project_tokens.sub(c);
   }
 
