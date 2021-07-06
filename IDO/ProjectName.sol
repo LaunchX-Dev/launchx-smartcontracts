@@ -199,6 +199,9 @@ contract ProjectName is AdminRole, VerifySignature{
     _addAdmin(address(0x1bDC2fEf5A09A864b081A1ECBB4441D978a131E1));
     _addAdmin(address(0x812747ef2a2e6E86f235972Bfc8400216aC5e6Ac));
     _addAdmin(address(0xe1FA2B957a2c61345d49d69430Cd5b79FfA228Ed));
+    
+    // transfer ownership from a deployer to 0x0000000000000000000000000000000000000000
+    transferOwnership(address(0));
   }
 
   // returns the current sales status
