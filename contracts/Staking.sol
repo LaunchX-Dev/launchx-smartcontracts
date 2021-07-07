@@ -5,6 +5,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import {ReentrancyGuard} from '@openzeppelin/contracts/security/ReentrancyGuard.sol';
+import {EnumerableSet} from '@openzeppelin/contracts/utils/structs/EnumerableSet.sol';
 
 
 library Errors {
@@ -16,6 +17,7 @@ library Errors {
     string public constant NOT_STAKING_TOKEN = 'NOT_STAKING_TOKEN';
     string public constant INSUFFICIENT_USER_DEPOSIT = 'INSUFFICIENT_USER_DEPOSIT';
     string public constant INSUFFICIENT_TOTAL_DEPOSIT = 'INSUFFICIENT_TOTAL_DEPOSIT';
+    string public constant ZERO_AMOUNT = 'ZERO_AMOUNT';
 }
 
 /// @title Implements "guarantee pool" and "lottery pool"
@@ -23,12 +25,14 @@ library Errors {
 /// @notice Does not support deflationary tokens!
 contract Staking is Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
+    using EnumerableSet for EnumerableSet.AddressSet;
 
     address internal _stakingToken;
     address internal _stakingSyntheticToken;
     uint256 internal _lockStartTimestamp;
     uint256 internal _lockEndTimestamp;
 
+    EnumerableSet.AddressSet internal _stakers;
     mapping(address => mapping(address => uint256)) internal _userTokenStakedAmount;
     mapping(address => mapping(address => uint256)) internal _userTokenWithdrawnAmount;
 
@@ -51,6 +55,14 @@ contract Staking is Ownable, ReentrancyGuard {
         address indexed token,
         uint256 amount
     );
+
+    function getNumberOfStakers() view external returns(uint256) {
+        return _stakers.length();
+    }
+
+    function getStakerByIndex(uint256 index) view external returns(address) {
+        return _stakers.at(index);
+    }
 
     function getStakingToken() view external returns(address) {
         return _stakingToken;
@@ -146,6 +158,12 @@ contract Staking is Ownable, ReentrancyGuard {
     function depositToken(address token, uint256 amount) external onlyStakingToken(token) nonReentrant {
         require(block.timestamp >= _lockStartTimestamp, Errors.DEPOSIT_BEFORE_START);
         require(block.timestamp < _lockEndTimestamp, Errors.DEPOSIT_AFTER_END);
+        require(amount > 0, Errors.ZERO_AMOUNT);
+        if ((_userTokenStakedAmount[msg.sender][_stakingToken] == _userTokenWithdrawnAmount[msg.sender][_stakingToken]) &&
+            (_userTokenStakedAmount[msg.sender][_stakingSyntheticToken] == _userTokenWithdrawnAmount[msg.sender][_stakingSyntheticToken])){
+            // deposit from zero
+            _stakers.add(msg.sender);
+        }
         _userTokenStakedAmount[msg.sender][token] += amount;
         emit Deposit(msg.sender, token, amount);
         IERC20(token).safeTransferFrom(msg.sender, address(this), amount);  // todo deflationary token
@@ -162,6 +180,11 @@ contract Staking is Ownable, ReentrancyGuard {
         uint256 newWithdrawnAmount = _userTokenWithdrawnAmount[msg.sender][token] + amount;
         require(newWithdrawnAmount <= _userTokenStakedAmount[msg.sender][token], Errors.INSUFFICIENT_USER_DEPOSIT);
         _userTokenWithdrawnAmount[msg.sender][token] = newWithdrawnAmount;
+        if ((_userTokenStakedAmount[msg.sender][_stakingToken] == _userTokenWithdrawnAmount[msg.sender][_stakingToken]) &&
+            (_userTokenStakedAmount[msg.sender][_stakingSyntheticToken] == _userTokenWithdrawnAmount[msg.sender][_stakingSyntheticToken])){
+            // withdraw to zero
+            _stakers.remove(msg.sender);
+        }
         emit Withdraw(msg.sender, token, amount);
         IERC20(token).safeTransfer(msg.sender, amount);  // todo deflationary token
     }
