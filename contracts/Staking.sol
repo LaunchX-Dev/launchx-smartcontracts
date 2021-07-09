@@ -183,7 +183,7 @@ contract Staking is Ownable, ReentrancyGuard {
         if ((_userTokenStakedAmount[msg.sender][_stakingToken] == _userTokenWithdrawnAmount[msg.sender][_stakingToken]) &&
             (_userTokenStakedAmount[msg.sender][_stakingSyntheticToken] == _userTokenWithdrawnAmount[msg.sender][_stakingSyntheticToken])){
             // withdraw to zero
-            _stakers.remove(msg.sender);
+            // _stakers.remove(msg.sender);
         }
         emit Withdraw(msg.sender, token, amount);
         IERC20(token).safeTransfer(msg.sender, amount);  // todo deflationary token
