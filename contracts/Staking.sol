@@ -185,6 +185,7 @@ contract Staking is Ownable, ReentrancyGuard {
             // withdraw to zero
             // _stakers.remove(msg.sender);
         }
+        _tokenTotalWithdrawnAmount[token] = _tokenTotalWithdrawnAmount[token] + amount;
         emit Withdraw(msg.sender, token, amount);
         IERC20(token).safeTransfer(msg.sender, amount);  // todo deflationary token
     }
