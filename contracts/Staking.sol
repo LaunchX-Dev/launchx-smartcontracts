@@ -180,11 +180,6 @@ contract Staking is Ownable, ReentrancyGuard {
         uint256 newWithdrawnAmount = _userTokenWithdrawnAmount[msg.sender][token] + amount;
         require(newWithdrawnAmount <= _userTokenStakedAmount[msg.sender][token], Errors.INSUFFICIENT_USER_DEPOSIT);
         _userTokenWithdrawnAmount[msg.sender][token] = newWithdrawnAmount;
-        if ((_userTokenStakedAmount[msg.sender][_stakingToken] == _userTokenWithdrawnAmount[msg.sender][_stakingToken]) &&
-            (_userTokenStakedAmount[msg.sender][_stakingSyntheticToken] == _userTokenWithdrawnAmount[msg.sender][_stakingSyntheticToken])){
-            // withdraw to zero
-            _stakers.remove(msg.sender);
-        }
         emit Withdraw(msg.sender, token, amount);
         IERC20(token).safeTransfer(msg.sender, amount);  // todo deflationary token
     }

@@ -4,4 +4,5 @@ compiler:
             - "@openzeppelin=OpenZeppelin/openzeppelin-contracts@4.1.0"
 
 dependencies:
+    - brownie-mix/token-mix@1.0.0
     - OpenZeppelin/openzeppelin-contracts@4.1.0
