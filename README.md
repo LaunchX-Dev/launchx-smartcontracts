@@ -11,7 +11,7 @@ brownie compile
 ## Deploy
 
 ```bash
-brownie networks add live bsc-testnet host=https://data-seed-prebsc-1-s1.binance.org:8545/ chainid=97
+brownie networks add live bsc-testnet host=https://data-seed-prebsc-1-s1.binance.org:8545/ chainid=97 explorer=https://api-testnet.bscscan.com/api
 
 brownie run deploy.py --network bsc-testnet
 ```

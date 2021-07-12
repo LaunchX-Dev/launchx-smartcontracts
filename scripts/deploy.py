@@ -1,6 +1,11 @@
 import time
 
-from brownie import accounts, web3, Contract, Staking, LaunchX, LaunchXP
+from brownie import (
+    accounts, web3, Contract,
+    Staking,
+    LaunchX,
+    LaunchXP
+)
 
 
 def main():

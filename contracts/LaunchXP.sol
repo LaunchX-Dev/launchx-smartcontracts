@@ -1,7 +1,3 @@
-/**
- *Submitted for verification at BscScan.com on 2021-06-29
-*/
-
 // https://launchx.finance
 
 pragma solidity ^0.4.25;

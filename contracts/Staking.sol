@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: unlicensed
-pragma solidity ^0.8.0;
+pragma solidity 0.8.4;
 
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
-import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
-import {ReentrancyGuard} from '@openzeppelin/contracts/security/ReentrancyGuard.sol';
-import {EnumerableSet} from '@openzeppelin/contracts/utils/structs/EnumerableSet.sol';
+import {Ownable} from "./Ownable.sol";
+import {SafeERC20} from './SafeERC20.sol';
+import {IERC20} from './IERC20.sol';
+import {ReentrancyGuard} from './ReentrancyGuard.sol';
+import {EnumerableSet} from './EnumerableSet.sol';
 
 
 library Errors {

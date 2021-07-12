@@ -6,7 +6,7 @@ from brownie import accounts, Staking, LaunchX, LaunchXP
 
 def main():
     admin = accounts.load('nftdev_0')
-    staking = Staking.at('0xd48Bea9843ACE352c8e9C0E0F65F89c90b80387a')
+    staking = Staking.at('0xe2Ef905341F98F67393235f670a9Ecc4ee9C0b61')  # warning
     launchX = LaunchX.at('0xE922b6d1386BDe6Eb586bec18F9a4c58D518B0f1')
     launchXP = LaunchXP.at('0x90BC605075335FCdB23d824A0a64Cc311ea071EF')
 
