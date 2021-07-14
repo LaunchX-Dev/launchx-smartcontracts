@@ -97,3 +97,8 @@ def test_deposit_emergency_withdraw(staking_contract, staking_token, staking_syt
     assert staking_contract.getUserTokenStakedAmount(user, staking_token.address) == deposit_amount
     assert staking_contract.getUserTokenBalanceAmount(user, staking_token.address) == 0
     assert staking_contract.getStakerByIndex(0) == user
+
+
+def test_failed_receive(staking_contract, accounts):
+    with brownie.reverts("DISABLED"):
+        accounts[0].transfer(staking_contract.address, "1 ether")

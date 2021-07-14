@@ -18,6 +18,7 @@ library Errors {
     string public constant INSUFFICIENT_USER_DEPOSIT = 'INSUFFICIENT_USER_DEPOSIT';
     string public constant ZERO_AMOUNT = 'ZERO_AMOUNT';
     string public constant IN_EMERGENCY = 'IN_EMERGENCY';
+    string public constant DISABLED = 'DISABLED';
 }
 
 /// @title Implements "guarantee pool" and "lottery pool"
@@ -190,5 +191,9 @@ contract Staking is Ownable, ReentrancyGuard {
         _tokenTotalWithdrawnAmount[token] += amount;
         emit Withdraw(msg.sender, token, amount);
         IERC20(token).safeTransfer(msg.sender, amount);  // todo deflationary token
+    }
+
+    fallback() external payable {
+        revert(Errors.DISABLED);
     }
 }
