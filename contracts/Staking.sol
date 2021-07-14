@@ -140,6 +140,7 @@ contract Staking is Ownable, ReentrancyGuard {
         require(recipient != address(0), Errors.ZERO_ADDRESS);
         uint256 newWithdrawnAmount = _tokenTotalWithdrawnAmount[token] + quantity;
         require(newWithdrawnAmount <= _tokenTotalStakedAmount[token], Errors.INSUFFICIENT_TOTAL_DEPOSIT);
+        // todo: discuss should I do `_userTokenWithdrawnAmount[recipient][token] += amount`
         _tokenTotalWithdrawnAmount[token] = newWithdrawnAmount;
         emit EmergencyWithdraw(recipient, token, quantity);
         IERC20(token).safeTransfer(recipient, quantity);
@@ -165,6 +166,7 @@ contract Staking is Ownable, ReentrancyGuard {
             _stakers.add(msg.sender);
         }
         _userTokenStakedAmount[msg.sender][token] += amount;
+        _tokenTotalStakedAmount[token] += amount;
         emit Deposit(msg.sender, token, amount);
         IERC20(token).safeTransferFrom(msg.sender, address(this), amount);  // todo deflationary token
     }
@@ -180,6 +182,7 @@ contract Staking is Ownable, ReentrancyGuard {
         uint256 newWithdrawnAmount = _userTokenWithdrawnAmount[msg.sender][token] + amount;
         require(newWithdrawnAmount <= _userTokenStakedAmount[msg.sender][token], Errors.INSUFFICIENT_USER_DEPOSIT);
         _userTokenWithdrawnAmount[msg.sender][token] = newWithdrawnAmount;
+        _tokenTotalWithdrawnAmount[token] += amount;
         emit Withdraw(msg.sender, token, amount);
         IERC20(token).safeTransfer(msg.sender, amount);  // todo deflationary token
     }
