@@ -16,8 +16,8 @@ library Errors {
     string public constant WITHDRAW_BEFORE_END = 'WITHDRAW_BEFORE_END';
     string public constant NOT_STAKING_TOKEN = 'NOT_STAKING_TOKEN';
     string public constant INSUFFICIENT_USER_DEPOSIT = 'INSUFFICIENT_USER_DEPOSIT';
-    string public constant INSUFFICIENT_TOTAL_DEPOSIT = 'INSUFFICIENT_TOTAL_DEPOSIT';
     string public constant ZERO_AMOUNT = 'ZERO_AMOUNT';
+    string public constant IN_EMERGENCY = 'IN_EMERGENCY';
 }
 
 /// @title Implements "guarantee pool" and "lottery pool"
@@ -27,6 +27,7 @@ contract Staking is Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
     using EnumerableSet for EnumerableSet.AddressSet;
 
+    bool internal _emergency;
     address internal _stakingToken;
     address internal _stakingSyntheticToken;
     uint256 internal _lockStartTimestamp;
@@ -50,11 +51,13 @@ contract Staking is Ownable, ReentrancyGuard {
         address indexed token,
         uint256 amount
     );
-    event EmergencyWithdraw(
-        address indexed user,
-        address indexed token,
-        uint256 amount
+    event EmergencySet(
+        address indexed user
     );
+
+    function getEmergency() view external returns(bool) {
+        return _emergency;
+    }
 
     function getNumberOfStakers() view external returns(uint256) {
         return _stakers.length();
@@ -129,21 +132,14 @@ contract Staking is Ownable, ReentrancyGuard {
         _lockEndTimestamp = lockEndTimestamp;
     }
 
-    modifier onlyStakingToken(address token) {
-        require(token == _stakingToken || token == _stakingSyntheticToken, Errors.NOT_STAKING_TOKEN);
+    modifier onlyNotEmergency() {
+        require(!_emergency, Errors.IN_EMERGENCY);
         _;
     }
 
-    // If there is a problem with the contract, it should be possible to return tokens (to the specified address)
-    // parameters - token address, recipient address and quantity
-    function emergencyWithdrawal(address token, address recipient, uint256 quantity) external onlyOwner onlyStakingToken(token) nonReentrant {
-        require(recipient != address(0), Errors.ZERO_ADDRESS);
-        uint256 newWithdrawnAmount = _tokenTotalWithdrawnAmount[token] + quantity;
-        require(newWithdrawnAmount <= _tokenTotalStakedAmount[token], Errors.INSUFFICIENT_TOTAL_DEPOSIT);
-        // todo: discuss should I do `_userTokenWithdrawnAmount[recipient][token] += amount`
-        _tokenTotalWithdrawnAmount[token] = newWithdrawnAmount;
-        emit EmergencyWithdraw(recipient, token, quantity);
-        IERC20(token).safeTransfer(recipient, quantity);
+    modifier onlyStakingToken(address token) {
+        require(token == _stakingToken || token == _stakingSyntheticToken, Errors.NOT_STAKING_TOKEN);
+        _;
     }
 
     /*
@@ -156,7 +152,7 @@ contract Staking is Ownable, ReentrancyGuard {
     If the transfer is successful,
     it adds to the counter of transferred tokens with this address the amount of transferred tokens (report from zero)
     */
-    function depositToken(address token, uint256 amount) external onlyStakingToken(token) nonReentrant {
+    function depositToken(address token, uint256 amount) external onlyStakingToken(token) nonReentrant onlyNotEmergency {
         require(block.timestamp >= _lockStartTimestamp, Errors.DEPOSIT_BEFORE_START);
         require(block.timestamp < _lockEndTimestamp, Errors.DEPOSIT_AFTER_END);
         require(amount > 0, Errors.ZERO_AMOUNT);
@@ -171,6 +167,12 @@ contract Staking is Ownable, ReentrancyGuard {
         IERC20(token).safeTransferFrom(msg.sender, address(this), amount);  // todo deflationary token
     }
 
+    // If there is a problem with the contract, it should be possible for all users to take tokens back.
+    function setEmergency() external onlyOwner nonReentrant onlyNotEmergency {
+        _emergency = true;
+        emit EmergencySet(msg.sender);
+    }
+
     /*
     When a function is called, all tokens of the specified type previously translated by the called address
     are transferred back to the calling address.
@@ -178,7 +180,10 @@ contract Staking is Ownable, ReentrancyGuard {
     If tokens have already been transferred in whole or in part - also an error.
     */
     function withdrawToken(address token, uint256 amount) external onlyStakingToken(token) nonReentrant {
-        require(block.timestamp > _lockEndTimestamp, Errors.WITHDRAW_BEFORE_END);  // @dev > not >= for safety
+        if (!_emergency) {
+            require(block.timestamp > _lockEndTimestamp, Errors.WITHDRAW_BEFORE_END);  // note: > not >= for safety
+        }
+        require(amount > 0, Errors.ZERO_AMOUNT);
         uint256 newWithdrawnAmount = _userTokenWithdrawnAmount[msg.sender][token] + amount;
         require(newWithdrawnAmount <= _userTokenStakedAmount[msg.sender][token], Errors.INSUFFICIENT_USER_DEPOSIT);
         _userTokenWithdrawnAmount[msg.sender][token] = newWithdrawnAmount;
@@ -186,7 +191,4 @@ contract Staking is Ownable, ReentrancyGuard {
         emit Withdraw(msg.sender, token, amount);
         IERC20(token).safeTransfer(msg.sender, amount);  // todo deflationary token
     }
-
-    // Also, the contract must have standard functions for changing and adding or removing owners
-    // done inside Ownable
 }

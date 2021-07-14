@@ -57,7 +57,6 @@ def test_deposit_withdraw(staking_contract, staking_token, staking_sythetic_toke
 def test_deposit_emergency_withdraw(staking_contract, staking_token, staking_sythetic_token, accounts, chain):
     admin = accounts[0]
     user = accounts[1]
-    user2 = accounts[2]
     deposit_amount = 10 ** 18
 
     # pre checks
@@ -83,15 +82,18 @@ def test_deposit_emergency_withdraw(staking_contract, staking_token, staking_syt
     assert staking_contract.getStakerByIndex(0) == user
 
 
-    user2_balance_before = staking_token.balanceOf(user2)
     # note: we do not sleep
-    staking_contract.emergencyWithdrawal(staking_token.address, user2, deposit_amount, {'from': admin})
-    assert staking_token.balanceOf(user2) - user2_balance_before == deposit_amount
+    staking_contract.setEmergency({'from': admin})
+    with brownie.reverts("IN_EMERGENCY"):
+        staking_contract.depositToken(staking_token.address, deposit_amount, {'from': user})
+    with brownie.reverts("IN_EMERGENCY"):
+        staking_contract.setEmergency({'from': admin})
 
-    # todo: discuss post-conditions
-    # assert staking_contract.getNumberOfStakers() == 1
-    # assert staking_contract.getTotalTokenStakedAmount(staking_token.address) == deposit_amount
-    # assert staking_contract.getTotalTokenBalanceAmount(staking_token.address) == 0
-    # assert staking_contract.getUserTokenStakedAmount(user, staking_token.address) == deposit_amount
-    # assert staking_contract.getUserTokenBalanceAmount(user, staking_token.address) == 0
-    # assert staking_contract.getStakerByIndex(0) == user
+    staking_contract.withdrawToken(staking_token.address, deposit_amount, {'from': user})
+
+    assert staking_contract.getNumberOfStakers() == 1
+    assert staking_contract.getTotalTokenStakedAmount(staking_token.address) == deposit_amount
+    assert staking_contract.getTotalTokenBalanceAmount(staking_token.address) == 0
+    assert staking_contract.getUserTokenStakedAmount(user, staking_token.address) == deposit_amount
+    assert staking_contract.getUserTokenBalanceAmount(user, staking_token.address) == 0
+    assert staking_contract.getStakerByIndex(0) == user
