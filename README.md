@@ -22,6 +22,8 @@ brownie run deploy.py --network bsc-testnet
 brownie networks add live bsc-mainnet host=https://bsc-dataseed.binance.org/ chainid=56 explorer=https://api.bscscan.com/api
 
 brownie run deploy.py --network bsc-mainnet
+
+brownie run deploy_synth.py --network bsc-mainnet
 ```
 
 ## Test
