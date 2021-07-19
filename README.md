@@ -24,6 +24,8 @@ brownie networks add live bsc-mainnet host=https://bsc-dataseed.binance.org/ cha
 brownie run deploy.py --network bsc-mainnet
 
 brownie run deploy_synth.py --network bsc-mainnet
+
+brownie run upgrade_synth.py --network bsc-mainnet
 ```
 
 ## Test

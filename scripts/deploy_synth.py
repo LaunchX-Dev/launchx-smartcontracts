@@ -22,5 +22,5 @@ def main():
         synthetic_logic.address, upgrade_admin, synthetic_init_call,
         {'from': logic_admin}
     )
-    synthetic_upgradeable = SyntheticDelegation.from_abi("ThronCoin", synthetic_proxy.address, SyntheticDelegation.abi)
+    synthetic_upgradeable = Contract.from_abi("SyntheticDelegation", synthetic_proxy.address, SyntheticDelegation.abi)
     assert synthetic_upgradeable.getRevision.call({"from": logic_admin}) == 1

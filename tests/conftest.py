@@ -1,11 +1,11 @@
 import time
 
 import pytest
-from brownie import accounts, Staking, LaunchX, LaunchXP
+from brownie import accounts, Staking, LaunchX, LaunchXP, SyntheticDelegation, Stub
 
 
 @pytest.fixture
-def staking_token(accounts, pm):
+def LX(accounts, pm):
     # token = pm('brownie-mix/token-mix@1.0.0').Token.deploy("Test Staking Token", "STAKING_TEST", 18, 1e21, {'from': accounts[0]})
     token = LaunchX.deploy({'from': accounts[0]})
     for account in accounts[1:]:
@@ -14,7 +14,7 @@ def staking_token(accounts, pm):
 
 
 @pytest.fixture
-def staking_sythetic_token(accounts, pm):
+def LXP(accounts, pm):
     # token = pm('brownie-mix/token-mix@1.0.0').Token.deploy("Test Staking Token", "STAKING_TEST", 18, 1e21, {'from': accounts[0]})
     token = LaunchXP.deploy({'from': accounts[0]})
     for account in accounts[1:]:
@@ -22,17 +22,30 @@ def staking_sythetic_token(accounts, pm):
     return token
 
 
+@pytest.fixture
+def sythetic_delegation(accounts, pm, LX, LXP):
+    contract = SyntheticDelegation.deploy({'from': accounts[0]})
+    contract.initialize(LX, LXP, {'from': accounts[0]})
+    return contract
+
+
+@pytest.fixture
+def stub(accounts):
+    contract = Stub.deploy({'from': accounts[0]})
+    return contract
+
+
 def build_staking_contract(
-        staking_token,
-        staking_sythetic_token,
+        LX,
+        LXP,
         chain,
 ):
     chain.sleep(1)  # brownie bug
     start = 365*24*3600 + chain.time()
     end = start + 1000
     contract = Staking.deploy(
-        staking_token.address,
-        staking_sythetic_token.address,
+        LX.address,
+        LXP.address,
         start,
         end,
         {'from': accounts[0]},
@@ -41,5 +54,5 @@ def build_staking_contract(
 
 
 @pytest.fixture()
-def staking_contract(staking_token, staking_sythetic_token, chain):
-    return build_staking_contract(staking_token=staking_token, staking_sythetic_token=staking_sythetic_token, chain=chain)
+def staking_contract(LX, LXP, chain):
+    return build_staking_contract(LX=LX, LXP=LXP, chain=chain)
