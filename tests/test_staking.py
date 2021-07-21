@@ -54,14 +54,14 @@ def test_deposit_withdraw(staking_contract, LX, LXP, accounts, chain):
     assert staking_contract.getStakerByIndex(0) == user
 
 
-def test_deposit_emergency_withdraw(staking_contract, LX, staking_sythetic_token, accounts, chain):
+def test_deposit_emergency_withdraw(staking_contract, LX, LXP, accounts, chain):
     admin = accounts[0]
     user = accounts[1]
     deposit_amount = 10 ** 18
 
     # pre checks
     assert LX.address == staking_contract.getStakingToken()
-    assert staking_sythetic_token.address == staking_contract.getStakingSyntheticToken()
+    assert LXP.address == staking_contract.getStakingSyntheticToken()
     assert staking_contract.getLockStartTimestamp() < staking_contract.getLockEndTimestamp()
     assert staking_contract.getLockStartTimestamp() > chain.time()
     assert staking_contract.getLockEndTimestamp() > chain.time()

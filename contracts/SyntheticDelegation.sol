@@ -29,7 +29,7 @@ are transferred to the caller’s address from the synthetic delegation contract
 
 As the stake is performed the smart contract remembers the total amount staked by user and
 the starting cycle (next biweekly cycle) the yield should be rewarded from.
-No new stakes can be added by the same address until all yields from previous periods are claimed by the staker.
+No new stakes can be added by the same address until all yields from previous cycles are claimed by the staker.
 
 The stakes receives no yields from current 2 week cycle. Even if he posts the stake in the first day of the cycle.
 The yields will start next cycle for him.
@@ -58,7 +58,7 @@ They will be transferred to the user in the same transaction.
 The rewards for current cycle can not be claimed,
 the user will need to wait for the end of the current cycle to be able to claim the reward.
 
-todo: ??? when to allow reward for period index
+todo: ??? when to allow reward for cycle index
 
 The rewards claimable for an address can be retrieved via:
 todo: claimableAmountOfUser(address)
@@ -75,9 +75,9 @@ todo: requestUnstake(amount)
 This method will require the same amount of LNCHXP previously unlocked (approved)
 for the contract to transfer from the caller’s address.
 Once called, the LNCHXP tokens are transferred back to the Synthetic contract,
-and the same amount of LNCHX tokens is reserved for withdrawal at the end of the current staking period.
+and the same amount of LNCHX tokens is reserved for withdrawal at the end of the current staking cycle.
 
-Once the request is submitted, the user will not be awarded any yields beyond the current period.
+Once the request is submitted, the user will not be awarded any yields beyond the current cycle.
 She will need to complete the unstake, and then stake again to be able to get new rewards.
 At any time after the cycle end the user can complete the Unstaking Request.
 This step should be done by one method call without parameters:
@@ -112,18 +112,18 @@ contract SyntheticDelegation is ReentrancyGuard, Initializable {  // todo: ownab
 //    }
 //    mapping (address => mapping(uint256 => WithdrawOrder)) internal _userWithdrawOrder;
 
-    uint256 public totalCurrentPeriodStakeAmount;
-    uint256 public totalNextPeriodStakeAmount;
-    uint256 public globalCachePeriod;
-    mapping (uint256 => uint256) public periodTotalReward;
-    mapping (uint256 => uint256) public periodTotalStaked;
+    uint256 public totalCurrentCycleStakeAmount;
+    uint256 public totalNextCycleStakeAmount;
+    uint256 public globalCacheCycle;
+    mapping (uint256 => uint256) public cycleTotalReward;
+    mapping (uint256 => uint256) public cycleTotalStaked;
     struct UserProfile {
-        uint256 currentPeriodStake;
-        uint256 nextPeriodStake;
-        uint256 currentPeriodAvailableUnstake;
-        uint256 nextPeriodAvailableUnstake;
-        uint256 cachePeriod;
-        uint256 currentPeriodClaimed;
+        uint256 currentCycleStake;
+        uint256 nextCycleStake;
+        uint256 currentCycleAvailableUnstake;
+        uint256 nextCycleAvailableUnstake;
+        uint256 cacheCycle;
+        uint256 currentCycleClaimed;
     }
 
     mapping (address => UserProfile) internal _userProfile;
@@ -135,136 +135,154 @@ contract SyntheticDelegation is ReentrancyGuard, Initializable {  // todo: ownab
     event Stake(address user, uint256 amount);
     event Unstake(address user, uint256 amount);
     event Claim(address user, uint256 amount);
-    event GlobalCacheUpdated(address indexed caller, uint256 indexed previousPeriod, uint256 indexed currentPeriod);
-    event UserCacheUpdated(address indexed caller, address indexed user, uint256 previousPeriod, uint256 indexed currentPeriod);
-    event UserPeriodPayout(address indexed caller, address indexed user, uint256 indexed period, uint256 payout);
+    event GlobalCacheUpdated(address indexed caller, uint256 indexed previousCycle, uint256 indexed currentCycle);
+    event UserCacheUpdated(address indexed caller, address indexed user, uint256 previousCycle, uint256 indexed currentCycle);
+    event UserCyclePayout(address indexed caller, address indexed user, uint256 indexed cycle, uint256 payout);
 
-    function getTotalTokensStake() view external returns(uint256){
-        return totalNextPeriodStakeAmount;
+    function getTotalTokensStaked() view external returns(uint256){
+        return totalNextCycleStakeAmount;
     }
 
     function getUserTotalStake(address user) external view returns(uint256) {
-        require(getCurrentPeriodIndex() == _userProfile[user].cachePeriod, "update cache please");
-        require(getCurrentPeriodIndex() == globalCachePeriod, "update cache please");
-        return _userProfile[user].nextPeriodStake;
+        require(getCurrentCycle() == _userProfile[user].cacheCycle, "update cache please");
+        require(getCurrentCycle() == globalCacheCycle, "update cache please");
+        return _userProfile[user].nextCycleStake;
     }
 
-    function getUserCurrentPeriodAvailableUnstake(address user) external view returns(uint256) {
-        require(getCurrentPeriodIndex() == _userProfile[user].cachePeriod, "update cache please");
-        require(getCurrentPeriodIndex() == globalCachePeriod, "update cache please");
-        return _userProfile[user].currentPeriodAvailableUnstake;
+    function getUserCurrentCycleAvailableUnstake(address user) external view returns(uint256) {
+        require(getCurrentCycle() == _userProfile[user].cacheCycle, "update cache please");
+        require(getCurrentCycle() == globalCacheCycle, "update cache please");
+        return _userProfile[user].currentCycleAvailableUnstake;
     }
 
-    function getUserNextPeriodAvailableUnstake(address user) external view returns(uint256) {
-        require(getCurrentPeriodIndex() == _userProfile[user].cachePeriod, "update cache please");
-        require(getCurrentPeriodIndex() == globalCachePeriod, "update cache please");
-        return _userProfile[user].nextPeriodAvailableUnstake;
+    function getUserCacheCycle(address user) external view returns(uint256) {
+        return _userProfile[user].cacheCycle;
     }
 
-    function getUserCachePeriod(address user) external view returns(uint256) {
-        return _userProfile[user].cachePeriod;
+    function getGlobalCacheCycle() external view returns(uint256) {
+        return globalCacheCycle;
     }
 
-    function getGlobalCachePeriod() external view returns(uint256) {
-        return globalCachePeriod;
+    function cycleRewardsOfUser(uint256 cycle, address user) external view returns(uint256){
+        uint256 current = getCurrentCycle();
+        UserProfile storage profile = _userProfile[user];
+        if (profile.cacheCycle == 0) {
+            return 0;
+        }
+        if (cycle == current) {
+            require(profile.cacheCycle == cycle, "update cache please");
+            return cycleTotalReward[cycle] * profile.currentCycleStake / cycleTotalStaked[cycle];
+        } else if (cycle > current) {
+            require(profile.cacheCycle == cycle, "update cache please");
+            return cycleTotalReward[cycle] * profile.nextCycleStake / totalNextCycleStakeAmount;
+        } else {
+            assert(cycle < current);
+            revert("SC does not remember past user stake");
+        }
     }
+
+    function cycleTotalRewards(uint256 cycle) external view returns(uint256) {
+        return cycleTotalReward[cycle];
+    }
+
+    function getClaimableRewardOfUser(address user) external view returns(uint256){  //todo tests
+        uint256 current = getCurrentCycle();
+        UserProfile storage profile = _userProfile[user];
+        if (profile.cacheCycle == 0) {
+            return 0;
+        }
+        uint256 reward = 0;
+        if (current > profile.cacheCycle) {
+            uint256 currentCycleStake = profile.currentCycleStake;
+            uint256 nextCycleStake = profile.nextCycleStake;
+            uint256 currentCycleClaimed = profile.currentCycleClaimed;
+            for (uint256 i = profile.cacheCycle; i < current; i++) {
+                if (cycleTotalStaked[i] > 0) {
+                    uint256 iReward = (cycleTotalReward[i] * currentCycleStake / cycleTotalStaked[i]
+                        - currentCycleClaimed);
+                    currentCycleClaimed += iReward;
+                    if (iReward > 0) {
+                        reward += iReward;
+                    }
+                }
+                currentCycleStake = nextCycleStake;
+                currentCycleClaimed = 0;
+            }
+        }
+        return reward;
+    }
+
+
+    // todo cycleTotalRewards(cycle, address)
 
     function initialize(address _LX, address _LXP) external initializer {
         LX = _LX;
         LXP = _LXP;
     }
 
-    function getCurrentPeriodIndex() view public returns(uint256) {
+    function getCurrentCycle() view public returns(uint256) {
         return (block.timestamp - FIRST_MONDAY) / WINDOW;
     }
 
-    function timeFromPeriodStart() view public returns(uint256) {
+    function timeFromCycleStart() view public returns(uint256) {
         return (block.timestamp - FIRST_MONDAY) % WINDOW;
     }
 
-    function updateGlobalCachePeriod() public {
-        uint256 current = getCurrentPeriodIndex();
-        if (globalCachePeriod == 0) {
-            emit GlobalCacheUpdated(msg.sender, globalCachePeriod, current);
-            globalCachePeriod = current;
+    function updateGlobalCacheCycle() public {
+        uint256 current = getCurrentCycle();
+        if (globalCacheCycle == 0) {
+            emit GlobalCacheUpdated(msg.sender, globalCacheCycle, current);
+            globalCacheCycle = current;
             return;
         }
-        if (current > globalCachePeriod) {
-            emit GlobalCacheUpdated(msg.sender, globalCachePeriod, current);
-            for (uint256 i = globalCachePeriod+1; i <= current; i++) {
-                periodTotalStaked[i] = totalNextPeriodStakeAmount;
+        if (current > globalCacheCycle) {
+            emit GlobalCacheUpdated(msg.sender, globalCacheCycle, current);
+            for (uint256 i = globalCacheCycle+1; i <= current; i++) {
+                cycleTotalStaked[i] = totalNextCycleStakeAmount;
             }
-            globalCachePeriod = current;
-            totalCurrentPeriodStakeAmount = totalNextPeriodStakeAmount;
+            globalCacheCycle = current;
+            totalCurrentCycleStakeAmount = totalNextCycleStakeAmount;
         }
     }
 
     // todo
-//    function updateGlobalCachePeriodLimited(uint256 maxIterations) public {
-//        uint256 current = getCurrentPeriodIndex();
-//        if (current > globalCachePeriod) {
-//            emit GlobalCacheUpdated(msg.sender, globalCachePeriod, current);
-//            for (uint256 i = globalCachePeriod+1; i < current; i++) {
-//                periodTotalStaked[i] = totalNextPeriodStakeAmount;
+//    function updateGlobalCacheCycleLimited(uint256 maxIterations) public {
+//        uint256 current = getCurrentCycle();
+//        if (current > globalCacheCycle) {
+//            emit GlobalCacheUpdated(msg.sender, globalCacheCycle, current);
+//            for (uint256 i = globalCacheCycle+1; i < current; i++) {
+//                cycleTotalStaked[i] = totalNextCycleStakeAmount;
 //            }
-//            globalCachePeriod = current;
-//            totalCurrentPeriodStakeAmount = totalNextPeriodStakeAmount;
+//            globalCacheCycle = current;
+//            totalCurrentCycleStakeAmount = totalNextCycleStakeAmount;
 //        }
 //    }
 
-    function getClaimableAmountOfUser(address user) external view returns(uint256){  //todo tests
-        uint256 current = getCurrentPeriodIndex();
+    function updateUserCacheCycle(address user) public {
+        uint256 current = getCurrentCycle();
         UserProfile storage profile = _userProfile[user];
-        if (profile.cachePeriod == 0) {
-            return 0;
-        }
-        uint256 reward = 0;
-        if (current > profile.cachePeriod) {
-            uint256 currentPeriodStake = profile.currentPeriodStake;
-            uint256 nextPeriodStake = profile.nextPeriodStake;
-            uint256 currentPeriodClaimed = profile.currentPeriodClaimed;
-            for (uint256 i = profile.cachePeriod; i < current; i++) {
-                if (periodTotalStaked[i] > 0) {
-                    uint256 iReward = (periodTotalReward[i] * currentPeriodStake / periodTotalStaked[i]
-                        - currentPeriodClaimed);
-                    currentPeriodClaimed += iReward;
-                    if (iReward > 0) {
-                        reward += iReward;
-                        emit UserPeriodPayout(msg.sender, user, i, iReward);
-                    }
-                }
-                currentPeriodStake = nextPeriodStake;
-                currentPeriodClaimed = 0;
-            }
-        }
-        return reward;
-    }
-
-    function updateUserCachePeriod(address user) public {  // todo maybe nonReentrant?
-        uint256 current = getCurrentPeriodIndex();
-        UserProfile storage profile = _userProfile[user];
-        if (profile.cachePeriod == 0) {
-            emit UserCacheUpdated(msg.sender, user, profile.cachePeriod, current);
-            profile.cachePeriod = current;
+        if (profile.cacheCycle == 0) {
+            emit UserCacheUpdated(msg.sender, user, profile.cacheCycle, current);
+            profile.cacheCycle = current;
             return;
         }
-        if (current > profile.cachePeriod) {
-            emit UserCacheUpdated(msg.sender, user, profile.cachePeriod, current);
+        if (current > profile.cacheCycle) {
+            emit UserCacheUpdated(msg.sender, user, profile.cacheCycle, current);
             uint256 reward;
-            for (uint256 i = profile.cachePeriod; i < current; i++) {
-                if (periodTotalStaked[i] > 0) {
-                    uint256 iReward = (periodTotalReward[i] * profile.currentPeriodStake / periodTotalStaked[i]
-                        - profile.currentPeriodClaimed);
-                    profile.currentPeriodClaimed += iReward;
+            for (uint256 i = profile.cacheCycle; i < current; i++) {
+                if (cycleTotalStaked[i] > 0) {
+                    uint256 iReward = (cycleTotalReward[i] * profile.currentCycleStake / cycleTotalStaked[i]
+                        - profile.currentCycleClaimed);
+                    profile.currentCycleClaimed += iReward;
                     if (iReward > 0) {
                         reward += iReward;
-                        emit UserPeriodPayout(msg.sender, user, i, iReward);
+                        emit UserCyclePayout(msg.sender, user, i, iReward);
                     }
                 }
-                profile.cachePeriod = i+1;
-                profile.currentPeriodStake = profile.nextPeriodStake;
-                profile.currentPeriodAvailableUnstake = profile.nextPeriodAvailableUnstake;
-                profile.currentPeriodClaimed = 0;
+                profile.cacheCycle = i+1;
+                profile.currentCycleStake = profile.nextCycleStake;
+                profile.currentCycleAvailableUnstake = profile.nextCycleAvailableUnstake;
+                profile.currentCycleClaimed = 0;
             }
             if (reward > 0) {
                 IERC20(LX).safeTransfer(user, reward);
@@ -273,63 +291,76 @@ contract SyntheticDelegation is ReentrancyGuard, Initializable {  // todo: ownab
     }
 
     function claimReward() external nonReentrant {
-        updateGlobalCachePeriod();  // todo limit for loop here
-        updateUserCachePeriod(msg.sender);
+        updateGlobalCacheCycle();  // todo limit for loop here
+        updateUserCacheCycle(msg.sender);
     }
 
     /// @notice Tokens are added every two weeks.
-    ///   Users must wait until beginning of a new two-week period for tokens to stake.
+    ///   Users must wait until beginning of a new two-week cycle for tokens to stake.
     function stake(uint256 amount) external nonReentrant {
         require(IERC20(LXP).balanceOf(address(this)) >= amount, "not enough LXP on the contract address");
-        updateGlobalCachePeriod();
-        updateUserCachePeriod(msg.sender);
+        updateGlobalCacheCycle();
+        updateUserCacheCycle(msg.sender);
         UserProfile storage profile = _userProfile[msg.sender];
-        profile.nextPeriodStake += amount;
+        profile.nextCycleStake += amount;
         emit Stake(msg.sender, amount);
         IERC20(LX).safeTransferFrom(msg.sender, address(this), amount);
         IERC20(LXP).safeTransfer(msg.sender, amount);
     }
 
-    /// @notice The contract needs to keep track of users’ running balance from delegation cycle to
-    ///   delegation cycle and users need to be able to withdraw from just this yield balance without
-    ///   removing themselves from the delegation.
-    ///   They also need to be able to read this balance(UI showing balance on staking page)
-    function getPossibleUnstakeAmountOfUserInNextPeriod(address user) public returns(uint256) {
-        updateGlobalCachePeriod();
-        updateUserCachePeriod(user);
-        return _userProfile[user].nextPeriodStake - _userProfile[user].nextPeriodAvailableUnstake;
+    function getUserNextCycleStake(address user) external view returns(uint256) {
+        uint256 current = getCurrentCycle();
+        require(_userProfile[user].cacheCycle == current, "update user cache please");
+        return _userProfile[user].nextCycleStake;
     }
 
-    function claimToUnstakeInNextPeriod(uint256 amount) external nonReentrant {
+    function getUserNextCycleAvailableUnstake(address user) external view returns(uint256) {
+        uint256 current = getCurrentCycle();
+        require(_userProfile[user].cacheCycle == current, "update user cache please");
+        return _userProfile[user].nextCycleAvailableUnstake;
+    }
+
+    function requestToUnstakeInTheNextCycle(uint256 amount) external nonReentrant {
         require(amount <= IERC20(LXP).balanceOf(msg.sender), "NOT_ENOUGH_LXP");
-        uint256 possibleUnstakeAmount = getPossibleUnstakeAmountOfUserInNextPeriod(msg.sender);
+        updateGlobalCacheCycle();
+        updateUserCacheCycle(msg.sender);
+        uint256 possibleUnstakeAmount = _userProfile[msg.sender].nextCycleStake;
         if (possibleUnstakeAmount > 0) {
-            _userProfile[msg.sender].nextPeriodAvailableUnstake += amount;
-            _userProfile[msg.sender].nextPeriodStake -= amount;
+            _userProfile[msg.sender].nextCycleAvailableUnstake += amount;
+            _userProfile[msg.sender].nextCycleStake -= amount;
             emit Claim(msg.sender, amount);
             IERC20(LXP).safeTransferFrom(msg.sender, address(this), amount);
         }
     }
 
+    function availableUnstake(address user) external view returns(uint256){
+        return _userProfile[user].currentCycleAvailableUnstake;
+    }
+
+    function pendingUnstakeRequests(address user) external view returns(uint256 pendingUnstake){
+        pendingUnstake = _userProfile[user].currentCycleAvailableUnstake -
+            _userProfile[user].nextCycleAvailableUnstake;
+    }
+
     /// @notice When user decides to withdraw, they do not receive tokens until end of two-week delegation cycle,
     ///   but they still need synthetic tokens in wallet to burn to contract.
     function unstake(uint256 amount) external nonReentrant {
-        updateGlobalCachePeriod();
-        updateUserCachePeriod(msg.sender);
-        require(_userProfile[msg.sender].currentPeriodAvailableUnstake >= amount, "not enough unfrozen LXP in current period");
-        // note that always nextPeriodAvailableUnstake >= currentPeriodAvailableUnstake, so more require not need
-        _userProfile[msg.sender].currentPeriodAvailableUnstake -= amount;
-        _userProfile[msg.sender].nextPeriodAvailableUnstake -= amount;
+        updateGlobalCacheCycle();
+        updateUserCacheCycle(msg.sender);
+        require(_userProfile[msg.sender].currentCycleAvailableUnstake >= amount, "not enough unfrozen LXP in current cycle");
+        // note that always nextCycleAvailableUnstake >= currentCycleAvailableUnstake, so more require not need
+        _userProfile[msg.sender].currentCycleAvailableUnstake -= amount;
+        _userProfile[msg.sender].nextCycleAvailableUnstake -= amount;
         emit Unstake(msg.sender, amount);
         IERC20(LX).safeTransfer(msg.sender, amount);
     }
 
     /// @dev Contract also needs ability to receive yield and claim that yield based on share of contract.
     function shareReward(uint256 amount, uint256 cycle) external nonReentrant {  //todo discuss
-        updateGlobalCachePeriod();
-        require(cycle >= getCurrentPeriodIndex(), "reward for past cycle");  // todo: discuss == current
+        updateGlobalCacheCycle();
+        require(cycle >= getCurrentCycle(), "reward for past cycle");  // todo: discuss == current
         IERC20(LX).safeTransferFrom(msg.sender, address(this), amount);
-        periodTotalReward[cycle] += amount;
+        cycleTotalReward[cycle] += amount;
     }
 
     function getRevision() pure public returns(uint256) {
