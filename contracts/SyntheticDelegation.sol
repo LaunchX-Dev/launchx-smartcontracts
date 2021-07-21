@@ -139,6 +139,10 @@ contract SyntheticDelegation is ReentrancyGuard, Initializable {  // todo: ownab
     event UserCacheUpdated(address indexed caller, address indexed user, uint256 previousPeriod, uint256 indexed currentPeriod);
     event UserPeriodPayout(address indexed caller, address indexed user, uint256 indexed period, uint256 payout);
 
+    function getTotalTokensStake() view external returns(uint256){
+        return totalNextPeriodStakeAmount;
+    }
+
     function getUserTotalStake(address user) external view returns(uint256) {
         require(getCurrentPeriodIndex() == _userProfile[user].cachePeriod, "update cache please");
         require(getCurrentPeriodIndex() == globalCachePeriod, "update cache please");
@@ -208,6 +212,34 @@ contract SyntheticDelegation is ReentrancyGuard, Initializable {  // todo: ownab
 //        }
 //    }
 
+    function getClaimableAmountOfUser(address user) external view returns(uint256){  //todo tests
+        uint256 current = getCurrentPeriodIndex();
+        UserProfile storage profile = _userProfile[user];
+        if (profile.cachePeriod == 0) {
+            return 0;
+        }
+        uint256 reward = 0;
+        if (current > profile.cachePeriod) {
+            uint256 currentPeriodStake = profile.currentPeriodStake;
+            uint256 nextPeriodStake = profile.nextPeriodStake;
+            uint256 currentPeriodClaimed = profile.currentPeriodClaimed;
+            for (uint256 i = profile.cachePeriod; i < current; i++) {
+                if (periodTotalStaked[i] > 0) {
+                    uint256 iReward = (periodTotalReward[i] * currentPeriodStake / periodTotalStaked[i]
+                        - currentPeriodClaimed);
+                    currentPeriodClaimed += iReward;
+                    if (iReward > 0) {
+                        reward += iReward;
+                        emit UserPeriodPayout(msg.sender, user, i, iReward);
+                    }
+                }
+                currentPeriodStake = nextPeriodStake;
+                currentPeriodClaimed = 0;
+            }
+        }
+        return reward;
+    }
+
     function updateUserCachePeriod(address user) public {  // todo maybe nonReentrant?
         uint256 current = getCurrentPeriodIndex();
         UserProfile storage profile = _userProfile[user];
@@ -221,8 +253,8 @@ contract SyntheticDelegation is ReentrancyGuard, Initializable {  // todo: ownab
             uint256 reward;
             for (uint256 i = profile.cachePeriod; i < current; i++) {
                 if (periodTotalStaked[i] > 0) {
-                    uint256 iReward = periodTotalReward[i] * profile.currentPeriodStake / periodTotalStaked[i] -
-                    profile.currentPeriodClaimed;
+                    uint256 iReward = (periodTotalReward[i] * profile.currentPeriodStake / periodTotalStaked[i]
+                        - profile.currentPeriodClaimed);
                     profile.currentPeriodClaimed += iReward;
                     if (iReward > 0) {
                         reward += iReward;
@@ -268,7 +300,7 @@ contract SyntheticDelegation is ReentrancyGuard, Initializable {  // todo: ownab
         return _userProfile[user].nextPeriodStake - _userProfile[user].nextPeriodAvailableUnstake;
     }
 
-    function claimToUnstakeInNextPeriod(uint256 amount) public {  //todo nonReentrant ??
+    function claimToUnstakeInNextPeriod(uint256 amount) external nonReentrant {
         require(amount <= IERC20(LXP).balanceOf(msg.sender), "NOT_ENOUGH_LXP");
         uint256 possibleUnstakeAmount = getPossibleUnstakeAmountOfUserInNextPeriod(msg.sender);
         if (possibleUnstakeAmount > 0) {
