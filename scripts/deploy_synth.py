@@ -1,5 +1,6 @@
 import time, datetime
 
+import brownie
 from brownie import (
     accounts, web3, Contract,
     Staking,
@@ -11,8 +12,9 @@ from brownie import (
 
 
 def main():
+    assert brownie.network.chain.id == 56, 'not bsc mainnet'
     logic_admin = accounts.load('metamask-main')
-    upgrade_admin = accounts.load('nftdev_1')
+    upgrade_admin = accounts.load('upgradeAdmin')
     launchX_address = '0xc43570263e924c8cf721f4b9c72eed1aec4eb7df'
     launchXP_address = '0xea75d0c4e47d875cdd13df4b3019295aeb397e9c'
 

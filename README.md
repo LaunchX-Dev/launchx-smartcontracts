@@ -58,5 +58,7 @@ Transaction sent: 0x91992f785474310712bc973c09ee15afb298c396aa31124448df2d16c34f
 ```python
 launchX_address = '0xc43570263e924c8cf721f4b9c72eed1aec4eb7df'
 launchXP_address = '0xea75d0c4e47d875cdd13df4b3019295aeb397e9c'
-# todo: staking  
+# todo staking
+SyntheticDelegation_address='0x78E1410b900167c0192BEabBa919cAc68efEcb2a'
+TransparentUpgradeableProxy_address='0xF0A9122f14204B6544f498569Ae884143a4e722a'
 ```
