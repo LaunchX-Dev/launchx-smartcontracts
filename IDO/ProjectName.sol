@@ -4,7 +4,8 @@ pragma solidity ^0.8.6;
 import "./Ownable.sol";
 import "./SafeMath.sol";
 import "./Roles.sol";
-import "./Token_interface.sol";
+import "./ProjectToken_interface.sol";
+import "./TetherToken_interface.sol";
 
 
 contract AdminRole is Context, Ownable {
@@ -152,7 +153,7 @@ contract VerifySignature{
 }
 
 
-contract ProjectName is AdminRole, VerifySignature{
+contract DinoX is AdminRole, VerifySignature{
   using SafeMath for uint256;
 
   event TokensaleInfo(address indexed signer, uint256 coinsvalue, uint256 tokensvalue, uint256 holder_max_project_tokens, uint256 allowed_coinsvalue, uint256 allowed_tokensvalue);
@@ -161,10 +162,10 @@ contract ProjectName is AdminRole, VerifySignature{
   uint8 private _tokensale_status;
 
   address public currency_token_address;
-  Token_interface private _currency_token;
+  TetherToken_interface private _currency_token;
 
   address public project_token_address;
-  Token_interface private _project_token;
+  ProjectToken_interface private _project_token;
 
   uint256 private _token_price;
 
@@ -180,25 +181,24 @@ contract ProjectName is AdminRole, VerifySignature{
     _tokensale_status = 2;
 
     //set the sale price for 1 token
-    _token_price = 100000000000000000; //0.10 USDT * (10**18) = 100000000000000000 wei, where 18 is decimal of USDT
+    _token_price = 25000;
 
     // set the address that stores Tokens and signs data from the white list
-    _signer_address = address(0x1bDC2fEf5A09A864b081A1ECBB4441D978a131E1);
+    _signer_address = address(0xEe3EA17E0Ed56a794e9bAE6F7A6c6b43b93333F5);
 
     // set the address of a currency smart contract
     // e.g. Token Tether (USDT) address is 0xdAC17F958D2ee523a2206206994597C13D831ec7
-    // mainnet url https://etherscan.io/token/0xdac17f958d2ee523a2206206994597c13d831ec7
-    currency_token_address = address(0x74321312E77534E8bABBA368dba9De73e150F1A6);
-    _currency_token = Token_interface(currency_token_address);
+    currency_token_address = address(0xdAC17F958D2ee523a2206206994597C13D831ec7);
+    _currency_token = TetherToken_interface(currency_token_address);
     
     // set the address of the smart contract of the project token
-    project_token_address = address(0x0CAa60FB124fF9542C1bDA0db35C1807021fF97b);
-    _project_token = Token_interface(project_token_address);
+    project_token_address = address(0xF7a8b369697EA3d3505092c3a95daF3e8BB72e4C);
+    _project_token = ProjectToken_interface(project_token_address);
     
     // set administrators
-    _addAdmin(address(0x1bDC2fEf5A09A864b081A1ECBB4441D978a131E1));
-    _addAdmin(address(0x812747ef2a2e6E86f235972Bfc8400216aC5e6Ac));
-    _addAdmin(address(0xe1FA2B957a2c61345d49d69430Cd5b79FfA228Ed));
+    _addAdmin(address(0x92C3b65677700eD595DA15A402f5d7C9A10a4e49));
+    _addAdmin(address(0x1489a398BeB2171D48C458CfbA9Cf1Bd739C0438));
+    _addAdmin(address(0xd0cF831E3a2E171220094C066Ec4263d24c0C715));
     
     // transfer ownership from a deployer to 0x0000000000000000000000000000000000000000
     transferOwnership(address(0));
@@ -226,7 +226,7 @@ contract ProjectName is AdminRole, VerifySignature{
   function tokenWithdrawal(address token_address, address recipient, uint256 value) public onlyOwnerOrAdmin {
     require(checkValidMultiSignatures(), "There is no required number of signatures");
 
-    Token_interface ct = Token_interface(token_address);
+    TetherToken_interface ct = TetherToken_interface(token_address);
     
     /////
     ///// Tether Token does not return bool when calling transfer
@@ -319,7 +319,7 @@ contract ProjectName is AdminRole, VerifySignature{
     require(checkEligibility(sender, require_token_value, holder_max_project_tokens, signature), "Customer limited by max value");
     
     // calculate the price for the specified purchase tokens value
-    uint256 topay_value = require_token_value.mul(_token_price).div(10**_currency_token.decimals());
+    uint256 topay_value = require_token_value.mul(_token_price).div(10**_project_token.decimals());
 
     // check customer USDT balance
     uint256 c_value = _currency_token.balanceOf(sender);
