@@ -153,7 +153,7 @@ contract VerifySignature{
 }
 
 
-contract DinoX is AdminRole, VerifySignature{
+contract ProjectName is AdminRole, VerifySignature{
   using SafeMath for uint256;
 
   event TokensaleInfo(address indexed signer, uint256 coinsvalue, uint256 tokensvalue, uint256 holder_max_project_tokens, uint256 allowed_coinsvalue, uint256 allowed_tokensvalue);
