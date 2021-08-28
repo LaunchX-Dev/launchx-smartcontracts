@@ -19,11 +19,11 @@ contract SyntheticDelegation is ReentrancyGuard, Initializable {
     uint256 constant WINDOW = 14 * 24 * 3600;   // 2 weeks
     uint256 constant ACTION_WINDOW = 1 * 3600;  // 1 hour to stake/unstake
 
-    uint256 public _totalCurrentCycleStakeAmount;  // todo internal
-    uint256 public _totalNextCycleStakeAmount; // todo internal
-    uint256 public _globalCacheCycle;  // todo internal
-    mapping (uint256 => uint256) public _cycleTotalReward;  // todo internal
-    mapping (uint256 => uint256) public _cycleTotalStaked;  // todo internal
+    uint256 internal _totalCurrentCycleStakeAmount;
+    uint256 internal _totalNextCycleStakeAmount;
+    uint256 internal _globalCacheCycle;
+    mapping (uint256 => uint256) internal _cycleTotalReward;
+    mapping (uint256 => uint256) internal _cycleTotalStaked;
     struct UserProfile {
         uint256 currentCycleStake;
         uint256 nextCycleStake;

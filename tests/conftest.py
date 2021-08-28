@@ -1,7 +1,7 @@
 import time
 
 import pytest
-from brownie import accounts, Staking, LaunchX, LaunchXP, SyntheticDelegation, Stub
+from brownie import accounts, Staking, LaunchX, LaunchXP, SyntheticDelegationMock, Stub
 
 
 @pytest.fixture
@@ -23,8 +23,8 @@ def LXP(accounts, pm):
 
 
 @pytest.fixture
-def sythetic_delegation(accounts, pm, LX, LXP):
-    contract = SyntheticDelegation.deploy({'from': accounts[0]})
+def sythetic_delegation(accounts, LX, LXP):
+    contract = SyntheticDelegationMock.deploy({'from': accounts[0]})
     contract.initialize(LX, LXP, {'from': accounts[0]})
     return contract
 

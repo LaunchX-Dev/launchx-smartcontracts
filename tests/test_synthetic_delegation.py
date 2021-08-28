@@ -121,7 +121,7 @@ def test_reward(LX, LXP, sythetic_delegation, accounts, chain, stub):
     user2 = accounts[2]
 
     cycle = sythetic_delegation.getCurrentCycle()
-    assert sythetic_delegation._globalCacheCycle() == 0
+    assert sythetic_delegation.raw_globalCacheCycle() == 0
     assert get_profile(sythetic_delegation, user1)['cacheCycle'] == 0
     assert get_profile(sythetic_delegation, user2)['cacheCycle'] == 0
 
@@ -132,17 +132,17 @@ def test_reward(LX, LXP, sythetic_delegation, accounts, chain, stub):
     LX.approve(sythetic_delegation.address, stake1, {'from': user1})
     sythetic_delegation.stake(stake1, {'from': user1})
 
-    assert sythetic_delegation._globalCacheCycle() == cycle  # cache updated
-    assert sythetic_delegation._totalCurrentCycleStakeAmount() == 0
-    assert sythetic_delegation._totalNextCycleStakeAmount() == stake1
+    assert sythetic_delegation.raw_globalCacheCycle() == cycle  # cache updated
+    assert sythetic_delegation.raw_totalCurrentCycleStakeAmount() == 0
+    assert sythetic_delegation.raw_totalNextCycleStakeAmount() == stake1
 
     stake2 = 1 * 10**18
     LX.approve(sythetic_delegation.address, stake2, {'from': user2})
     sythetic_delegation.stake(stake2, {'from': user2})
 
-    assert sythetic_delegation._globalCacheCycle() == cycle  # cache updated
-    assert sythetic_delegation._totalCurrentCycleStakeAmount() == 0
-    assert sythetic_delegation._totalNextCycleStakeAmount() == stake1 + stake2
+    assert sythetic_delegation.raw_globalCacheCycle() == cycle  # cache updated
+    assert sythetic_delegation.raw_totalCurrentCycleStakeAmount() == 0
+    assert sythetic_delegation.raw_totalNextCycleStakeAmount() == stake1 + stake2
 
     reward_amount = 1 * 10**16
 
@@ -174,7 +174,7 @@ def test_reward(LX, LXP, sythetic_delegation, accounts, chain, stub):
     assert profile1['currentCycleStake'] == 0
     assert profile1['nextCycleStake'] == stake1
 
-    assert sythetic_delegation._cycleTotalReward(sythetic_delegation.getCurrentCycle()) == reward_amount
+    assert sythetic_delegation.raw_cycleTotalReward(sythetic_delegation.getCurrentCycle()) == reward_amount
 
     with brownie.reverts("update global cache"):
         assert sythetic_delegation.getClaimableRewardOfUserForNow(user1) == int(reward_amount * stake1 / (stake1 + stake2))
@@ -182,12 +182,12 @@ def test_reward(LX, LXP, sythetic_delegation, accounts, chain, stub):
         assert sythetic_delegation.getClaimableRewardOfUserForNow(user2) == int(reward_amount * stake1 / (stake1 + stake2))
 
     sythetic_delegation.updateGlobalCache()
-    assert sythetic_delegation._cycleTotalReward(sythetic_delegation.getCurrentCycle() - 1) == 0
-    assert sythetic_delegation._cycleTotalStaked(sythetic_delegation.getCurrentCycle() - 1) == 0
-    assert sythetic_delegation._cycleTotalReward(sythetic_delegation.getCurrentCycle()) == reward_amount
-    assert sythetic_delegation._cycleTotalStaked(sythetic_delegation.getCurrentCycle()) == stake1 + stake2
-    assert sythetic_delegation._cycleTotalReward(sythetic_delegation.getCurrentCycle()+1) == 0
-    assert sythetic_delegation._cycleTotalStaked(sythetic_delegation.getCurrentCycle()+1) == 0
+    assert sythetic_delegation.raw_cycleTotalReward(sythetic_delegation.getCurrentCycle() - 1) == 0
+    assert sythetic_delegation.raw_cycleTotalStaked(sythetic_delegation.getCurrentCycle() - 1) == 0
+    assert sythetic_delegation.raw_cycleTotalReward(sythetic_delegation.getCurrentCycle()) == reward_amount
+    assert sythetic_delegation.raw_cycleTotalStaked(sythetic_delegation.getCurrentCycle()) == stake1 + stake2
+    assert sythetic_delegation.raw_cycleTotalReward(sythetic_delegation.getCurrentCycle()+1) == 0
+    assert sythetic_delegation.raw_cycleTotalStaked(sythetic_delegation.getCurrentCycle()+1) == 0
 
     assert sythetic_delegation.getClaimableRewardOfUserForNow(user1) == 0
     assert sythetic_delegation.getClaimableRewardOfUserForNow(user2) == 0
