@@ -222,3 +222,264 @@ def test_reward(LX, LXP, sythetic_delegation, accounts, chain, stub):
     sythetic_delegation.claimReward({'from': user2})
     assert LX.balanceOf(user1) - balanceBefore1 == 0
     assert LX.balanceOf(user2) - balanceBefore2 == 0
+
+
+# Tests that users can't unstake before staking period, during staking period, 
+# during staking period after requesting, after staking period more than requested.
+def test_illegal_unstaking(LX, LXP, sythetic_delegation, accounts, chain, stub):
+    chain.sleep(1)  # brownie bug
+    admin = accounts[0]
+    user1 = accounts[1]
+    user2 = accounts[2]
+    
+    init_cycle = sythetic_delegation.getCurrentCycle()
+
+    # provide lp tokens
+    delegation_balance = 100 * 10**18
+    LXP.transfer(sythetic_delegation.address, delegation_balance, {'from': admin})
+
+    # provide reward for next cycle
+    # rewards = [2 * 10**16, 3 * 10**16, 5 * 10**16]
+    # LX.approve(sythetic_delegation.address, rewards[0], {'from': admin})
+    # sythetic_delegation.shareReward(rewards[0], init_cycle+1, {'from': admin})
+
+    # init user caches
+    sythetic_delegation.updateUserCache(user1, {'from': user1})
+    sythetic_delegation.updateUserCache(user2, {'from': user2})
+
+    # stake #1 by user1
+    stakes1 = [2 * 10**18, 3 * 10**18, 5 * 10**18]
+    LX.approve(sythetic_delegation.address, stakes1[0], {'from': user1})
+    sythetic_delegation.stake(stakes1[0], {'from': user1})
+
+    assert sythetic_delegation.getTotalCurrentCycleStakeAmount() == 0
+    assert sythetic_delegation.getTotalNextCycleStakeAmount() == stakes1[0]
+    assert sythetic_delegation.getUserCurrentCycleAvailableUnstake(user1) == 0
+    assert sythetic_delegation.getUserCurrentCycleAvailableUnstake(user2) == 0
+    assert sythetic_delegation.getUserNextCycleStake(user1) == stakes1[0]
+    assert sythetic_delegation.getUserNextCycleStake(user2) == 0
+    assert sythetic_delegation.getUserNextCycleAvailableUnstake(user1) == 0
+    assert sythetic_delegation.getUserNextCycleAvailableUnstake(user2) == 0
+
+    with brownie.reverts("not enough unfrozen LXP in current cycle"):
+        sythetic_delegation.unstake(1, {'from': user1})
+
+    # stake #2 by user2
+    stakes2 = [7 * 10**18, 11 * 10**18]
+    LX.approve(sythetic_delegation.address, stakes2[0], {'from': user2})
+    sythetic_delegation.stake(stakes2[0], {'from': user2})
+
+    assert sythetic_delegation.getTotalCurrentCycleStakeAmount() == 0
+    assert sythetic_delegation.getTotalNextCycleStakeAmount() == stakes1[0] + stakes2[0]
+    assert sythetic_delegation.getUserCurrentCycleAvailableUnstake(user1) == 0
+    assert sythetic_delegation.getUserCurrentCycleAvailableUnstake(user2) == 0
+    assert sythetic_delegation.getUserNextCycleStake(user1) == stakes1[0]
+    assert sythetic_delegation.getUserNextCycleStake(user2) == stakes2[0]
+    assert sythetic_delegation.getUserNextCycleAvailableUnstake(user1) == 0
+    assert sythetic_delegation.getUserNextCycleAvailableUnstake(user2) == 0
+
+    with brownie.reverts("not enough unfrozen LXP in current cycle"):
+        sythetic_delegation.unstake(1, {'from': user1})
+    with brownie.reverts("not enough unfrozen LXP in current cycle"):
+        sythetic_delegation.unstake(1, {'from': user2})
+
+    # stake #3 by user1
+    LX.approve(sythetic_delegation.address, stakes1[1], {'from': user1})
+    sythetic_delegation.stake(stakes1[1], {'from': user1})
+
+    assert sythetic_delegation.getTotalCurrentCycleStakeAmount() == 0
+    assert sythetic_delegation.getTotalNextCycleStakeAmount() == stakes1[0] + stakes2[0] + stakes1[1]
+    assert sythetic_delegation.getUserCurrentCycleAvailableUnstake(user1) == 0
+    assert sythetic_delegation.getUserCurrentCycleAvailableUnstake(user2) == 0
+    assert sythetic_delegation.getUserNextCycleStake(user1) == stakes1[0] + stakes1[1]
+    assert sythetic_delegation.getUserNextCycleStake(user2) == stakes2[0]
+    assert sythetic_delegation.getUserNextCycleAvailableUnstake(user1) == 0
+    assert sythetic_delegation.getUserNextCycleAvailableUnstake(user2) == 0
+
+    with brownie.reverts("not enough unfrozen LXP in current cycle"):
+        sythetic_delegation.unstake(1, {'from': user1})
+    with brownie.reverts("not enough unfrozen LXP in current cycle"):
+        sythetic_delegation.unstake(1, {'from': user2})
+
+    # sleep until next cycle
+    chain.sleep(14 * 24 * 3600)  # sleep 2 weeks
+    stub.inc()  # force new block
+    sythetic_delegation.updateGlobalCache()
+    sythetic_delegation.updateUserCache(user1, {'from': user1})
+    sythetic_delegation.updateUserCache(user2, {'from': user2})
+    assert sythetic_delegation.getCurrentCycle() == init_cycle + 1
+
+    assert sythetic_delegation.getTotalCurrentCycleStakeAmount() == stakes1[0] + stakes2[0] + stakes1[1]
+    assert sythetic_delegation.getTotalNextCycleStakeAmount() == stakes1[0] + stakes2[0] + stakes1[1]
+    assert sythetic_delegation.getUserCurrentCycleAvailableUnstake(user1) == 0
+    assert sythetic_delegation.getUserCurrentCycleAvailableUnstake(user2) == 0
+    assert sythetic_delegation.getUserNextCycleStake(user1) == stakes1[0] + stakes1[1]
+    assert sythetic_delegation.getUserNextCycleStake(user2) == stakes2[0]
+    assert sythetic_delegation.getUserNextCycleAvailableUnstake(user1) == 0
+    assert sythetic_delegation.getUserNextCycleAvailableUnstake(user2) == 0
+
+    with brownie.reverts("not enough unfrozen LXP in current cycle"):
+        sythetic_delegation.unstake(1, {'from': user1})
+    with brownie.reverts("not enough unfrozen LXP in current cycle"):
+        sythetic_delegation.unstake(1, {'from': user2})
+
+    # sleep 3 more cycles
+    chain.sleep(3 * 14 * 24 * 3600)  # sleep 6 weeks
+    stub.inc()  # force new block
+    sythetic_delegation.updateGlobalCache()
+    sythetic_delegation.updateUserCache(user1, {'from': user1})
+    sythetic_delegation.updateUserCache(user2, {'from': user2})
+    assert sythetic_delegation.getCurrentCycle() == init_cycle + 4
+
+    assert sythetic_delegation.getTotalCurrentCycleStakeAmount() == stakes1[0] + stakes2[0] + stakes1[1]
+    assert sythetic_delegation.getTotalNextCycleStakeAmount() == stakes1[0] + stakes2[0] + stakes1[1]
+    assert sythetic_delegation.getUserCurrentCycleAvailableUnstake(user1) == 0
+    assert sythetic_delegation.getUserCurrentCycleAvailableUnstake(user2) == 0
+    assert sythetic_delegation.getUserNextCycleStake(user1) == stakes1[0] + stakes1[1]
+    assert sythetic_delegation.getUserNextCycleStake(user2) == stakes2[0]
+    assert sythetic_delegation.getUserNextCycleAvailableUnstake(user1) == 0
+    assert sythetic_delegation.getUserNextCycleAvailableUnstake(user2) == 0
+
+    with brownie.reverts("not enough unfrozen LXP in current cycle"):
+        sythetic_delegation.unstake(1, {'from': user1})
+    with brownie.reverts("not enough unfrozen LXP in current cycle"):
+        sythetic_delegation.unstake(1, {'from': user2})
+
+    # stake #4 by user2
+    LX.approve(sythetic_delegation.address, stakes2[1], {'from': user2})
+    sythetic_delegation.stake(stakes2[1], {'from': user2})
+
+    assert sythetic_delegation.getTotalCurrentCycleStakeAmount() == stakes1[0] + stakes2[0] + stakes1[1]
+    assert sythetic_delegation.getTotalNextCycleStakeAmount() == stakes1[0] + stakes2[0] + stakes1[1] + stakes2[1]
+    assert sythetic_delegation.getUserCurrentCycleAvailableUnstake(user1) == 0
+    assert sythetic_delegation.getUserCurrentCycleAvailableUnstake(user2) == 0
+    assert sythetic_delegation.getUserNextCycleStake(user1) == stakes1[0] + stakes1[1]
+    assert sythetic_delegation.getUserNextCycleStake(user2) == stakes2[0] + stakes2[1]
+    assert sythetic_delegation.getUserNextCycleAvailableUnstake(user1) == 0
+    assert sythetic_delegation.getUserNextCycleAvailableUnstake(user2) == 0
+
+    with brownie.reverts("not enough unfrozen LXP in current cycle"):
+        sythetic_delegation.unstake(1, {'from': user1})
+    with brownie.reverts("not enough unfrozen LXP in current cycle"):
+        sythetic_delegation.unstake(1, {'from': user2})
+
+    # request to unstake
+    LXP.approve(sythetic_delegation.address, 1, {'from': user1})
+    sythetic_delegation.requestToUnstakeInTheNextCycle(1, {'from': user1})
+    LXP.approve(sythetic_delegation.address, 1, {'from': user2})
+    sythetic_delegation.requestToUnstakeInTheNextCycle(1, {'from': user2})
+
+    assert sythetic_delegation.getTotalCurrentCycleStakeAmount() == stakes1[0] + stakes2[0] + stakes1[1]
+    assert sythetic_delegation.getTotalNextCycleStakeAmount() == stakes1[0] + stakes2[0] + stakes1[1] + stakes2[1] - 2
+    assert sythetic_delegation.getUserCurrentCycleAvailableUnstake(user1) == 0
+    assert sythetic_delegation.getUserCurrentCycleAvailableUnstake(user2) == 0
+    assert sythetic_delegation.getUserNextCycleStake(user1) == stakes1[0] + stakes1[1] - 1
+    assert sythetic_delegation.getUserNextCycleStake(user2) == stakes2[0] + stakes2[1] - 1
+    assert sythetic_delegation.getUserNextCycleAvailableUnstake(user1) == 1
+    assert sythetic_delegation.getUserNextCycleAvailableUnstake(user2) == 1
+
+    # can't unstake during current period after request
+    with brownie.reverts("not enough unfrozen LXP in current cycle"):
+        sythetic_delegation.unstake(1, {'from': user1})
+    with brownie.reverts("not enough unfrozen LXP in current cycle"):
+        sythetic_delegation.unstake(1, {'from': user2})
+
+    # sleep until next cycle
+    chain.sleep(14 * 24 * 3600)  # sleep 2 weeks
+    stub.inc()  # force new block
+    sythetic_delegation.updateGlobalCache()
+    sythetic_delegation.updateUserCache(user1, {'from': user1})
+    sythetic_delegation.updateUserCache(user2, {'from': user2})
+    assert sythetic_delegation.getCurrentCycle() == init_cycle + 5
+
+    assert sythetic_delegation.getTotalCurrentCycleStakeAmount() == stakes1[0] + stakes2[0] + stakes1[1] + stakes2[1] - 2
+    assert sythetic_delegation.getTotalNextCycleStakeAmount() == stakes1[0] + stakes2[0] + stakes1[1] + stakes2[1] - 2
+    assert sythetic_delegation.getUserCurrentCycleAvailableUnstake(user1) == 1
+    assert sythetic_delegation.getUserCurrentCycleAvailableUnstake(user2) == 1
+    assert sythetic_delegation.getUserNextCycleStake(user1) == stakes1[0] + stakes1[1] - 1
+    assert sythetic_delegation.getUserNextCycleStake(user2) == stakes2[0] + stakes2[1] - 1
+    assert sythetic_delegation.getUserNextCycleAvailableUnstake(user1) == 1
+    assert sythetic_delegation.getUserNextCycleAvailableUnstake(user2) == 1
+
+    # can't unstake more than requested
+    with brownie.reverts("not enough unfrozen LXP in current cycle"):
+        sythetic_delegation.unstake(2, {'from': user1})
+    with brownie.reverts("not enough unfrozen LXP in current cycle"):
+        sythetic_delegation.unstake(2, {'from': user2})
+    
+    # can unstake what requested
+    sythetic_delegation.unstake(1, {'from': user1})
+    sythetic_delegation.unstake(1, {'from': user2})
+
+    assert sythetic_delegation.getTotalCurrentCycleStakeAmount() == stakes1[0] + stakes2[0] + stakes1[1] + stakes2[1] - 2
+    assert sythetic_delegation.getTotalNextCycleStakeAmount() == stakes1[0] + stakes2[0] + stakes1[1] + stakes2[1] - 2
+    assert sythetic_delegation.getUserCurrentCycleAvailableUnstake(user1) == 0
+    assert sythetic_delegation.getUserCurrentCycleAvailableUnstake(user2) == 0
+    assert sythetic_delegation.getUserNextCycleStake(user1) == stakes1[0] + stakes1[1] - 1
+    assert sythetic_delegation.getUserNextCycleStake(user2) == stakes2[0] + stakes2[1] - 1
+    assert sythetic_delegation.getUserNextCycleAvailableUnstake(user1) == 0
+    assert sythetic_delegation.getUserNextCycleAvailableUnstake(user2) == 0
+
+
+def test_request_unstake(LX, LXP, sythetic_delegation, accounts, chain, stub):
+    chain.sleep(1)  # brownie bug
+    admin = accounts[0]
+    user = accounts[1]
+
+    # provide lp tokens
+    delegation_balance = 100 * 10**18
+    LXP.transfer(sythetic_delegation.address, delegation_balance, {'from': admin})    
+
+    # init
+    init_cycle = sythetic_delegation.getCurrentCycle()
+    sythetic_delegation.updateUserCache(user, {'from': user})
+
+    # stake
+    stake_amount = 2 * 10**18
+    unstake_amount = 1 * 10**18
+    LX.approve(sythetic_delegation.address, stake_amount, {'from': user})
+    sythetic_delegation.stake(stake_amount, {'from': user})
+
+    assert sythetic_delegation.getUserCurrentCycleAvailableUnstake(user) == 0
+    assert sythetic_delegation.getUserNextCycleStake(user) == stake_amount
+    assert sythetic_delegation.getUserNextCycleAvailableUnstake(user) == 0
+
+    # TODO: contract fails with Integer overflow, why require not fails?
+    # can't request more than staked
+    with brownie.reverts("NOT_ENOUGH_LXP"):
+        sythetic_delegation.requestToUnstakeInTheNextCycle(stake_amount + 1, {'from': user})
+
+    # request to unstake
+    LXP.approve(sythetic_delegation.address, unstake_amount, {'from': user})
+    sythetic_delegation.requestToUnstakeInTheNextCycle(unstake_amount, {'from': user})
+    
+    assert sythetic_delegation.getUserCurrentCycleAvailableUnstake(user) == 0
+    assert sythetic_delegation.getUserNextCycleStake(user) == stake_amount - unstake_amount
+    assert sythetic_delegation.getUserNextCycleAvailableUnstake(user) == unstake_amount
+
+    # can't unstake this cycle
+    with brownie.reverts("not enough unfrozen LXP in current cycle"):
+        sythetic_delegation.unstake(stake_amount, {'from': user})
+
+    # sleep until next cycle    
+    chain.sleep(14 * 24 * 3600)  # sleep 2 weeks
+    stub.inc()  # force new block
+    sythetic_delegation.updateGlobalCache()
+    sythetic_delegation.updateUserCache(user, {'from': user})
+    assert sythetic_delegation.getCurrentCycle() == init_cycle + 1
+    
+    assert sythetic_delegation.getUserCurrentCycleAvailableUnstake(user) == unstake_amount
+    assert sythetic_delegation.getUserNextCycleStake(user) == stake_amount - unstake_amount
+    assert sythetic_delegation.getUserNextCycleAvailableUnstake(user) == unstake_amount
+
+    # can't unstake more than requested
+    with brownie.reverts("not enough unfrozen LXP in current cycle"):
+        sythetic_delegation.unstake(unstake_amount + 1, {'from': user})
+
+    # unstake
+    sythetic_delegation.unstake(unstake_amount, {'from': user})
+    
+    # check
+    assert sythetic_delegation.getUserCurrentCycleAvailableUnstake(user) == 0
+    assert sythetic_delegation.getUserNextCycleStake(user) == stake_amount - unstake_amount
+    assert sythetic_delegation.getUserNextCycleAvailableUnstake(user) == 0

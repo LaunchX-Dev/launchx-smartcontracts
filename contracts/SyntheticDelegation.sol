@@ -248,6 +248,7 @@ contract SyntheticDelegation is ReentrancyGuard, Initializable {
         updateUserCache(msg.sender);
         uint256 possibleUnstakeAmount = _userProfile[msg.sender].nextCycleStake;
         if (possibleUnstakeAmount > 0) {
+            // todo: throws Integer overflow error if `amount` larger than what was staked. require line above doesn't work
             _totalNextCycleStakeAmount -= amount;
             _userProfile[msg.sender].nextCycleAvailableUnstake += amount;
             _userProfile[msg.sender].nextCycleStake -= amount;
