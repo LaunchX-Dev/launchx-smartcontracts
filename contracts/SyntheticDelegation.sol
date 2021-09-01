@@ -30,7 +30,6 @@ contract SyntheticDelegation is ReentrancyGuard, Initializable {
         uint256 currentCycleAvailableUnstake;
         uint256 nextCycleAvailableUnstake;
         uint256 cacheCycle;
-        uint256 currentCycleClaimed;
     }
 
     function getTotalCurrentCycleStakeAmount() external view returns(uint256){
@@ -111,20 +110,11 @@ contract SyntheticDelegation is ReentrancyGuard, Initializable {
         }
         uint256 reward = 0;
         if (current > profile.cacheCycle) {
-            uint256 currentCycleStake = profile.currentCycleStake;
-            uint256 nextCycleStake = profile.nextCycleStake;
-            uint256 currentCycleClaimed = profile.currentCycleClaimed;
             for (uint256 i = profile.cacheCycle; i < current; i++) {
+                uint256 cycleStake = (i == profile.cacheCycle) ? profile.currentCycleStake : profile.nextCycleStake;
                 if (_cycleTotalStaked[i] > 0) {
-                    uint256 iReward = (_cycleTotalReward[i] * currentCycleStake / _cycleTotalStaked[i]
-                        - currentCycleClaimed);
-                    currentCycleClaimed += iReward;
-                    if (iReward > 0) {
-                        reward += iReward;
-                    }
+                    reward += _cycleTotalReward[i] * cycleStake / _cycleTotalStaked[i];
                 }
-                currentCycleStake = nextCycleStake;
-                currentCycleClaimed = 0;
             }
         }
         return reward;
@@ -196,19 +186,17 @@ contract SyntheticDelegation is ReentrancyGuard, Initializable {
             uint256 reward;
             for (uint256 i = profile.cacheCycle; i < current; i++) {
                 if (_cycleTotalStaked[i] > 0) {
-                    uint256 iReward = (_cycleTotalReward[i] * profile.currentCycleStake / _cycleTotalStaked[i]
-                        - profile.currentCycleClaimed);
-                    profile.currentCycleClaimed += iReward;
+                    uint256 cycleStaked = (i == profile.cacheCycle) ? profile.currentCycleStake : profile.nextCycleStake;
+                    uint256 iReward = _cycleTotalReward[i] * cycleStaked / _cycleTotalStaked[i];
                     if (iReward > 0) {
                         reward += iReward;
                         emit UserCyclePayout(msg.sender, user, i, iReward);
                     }
-                }
-                profile.cacheCycle = i+1;
-                profile.currentCycleStake = profile.nextCycleStake;
-                profile.currentCycleAvailableUnstake = profile.nextCycleAvailableUnstake;
-                profile.currentCycleClaimed = 0;
+                }  
             }
+            profile.cacheCycle = current;
+            profile.currentCycleStake = profile.nextCycleStake;
+            profile.currentCycleAvailableUnstake = profile.nextCycleAvailableUnstake;
             if (reward > 0) {
                 IERC20(LX).safeTransfer(user, reward);
             }
