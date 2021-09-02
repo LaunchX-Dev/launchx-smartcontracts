@@ -59,10 +59,6 @@ contract SyntheticDelegation is ReentrancyGuard, Initializable {
     event UserCacheUpdated(address indexed caller, address indexed user, uint256 previousCycle, uint256 indexed currentCycle);
     event UserCyclePayout(address indexed caller, address indexed user, uint256 indexed cycle, uint256 payout);
 
-    function getTotalTokensStaked() view external returns(uint256){
-        return _totalNextCycleStakeAmount;
-    }
-
     function getUserTotalStake(address user) requireUpdatedGlobalCache requireUpdatedUserCache(user) external view returns(uint256) {
         return _userProfile[user].nextCycleStake;
     }
@@ -242,13 +238,14 @@ contract SyntheticDelegation is ReentrancyGuard, Initializable {
         return _userProfile[user].nextCycleAvailableUnstake;
     }
 
+    /// @notice A user can't request and unstake more than staked from their address by transferring LXP tokens.
     function requestToUnstakeInTheNextCycle(uint256 amount) external nonReentrant {
         require(amount <= IERC20(LXP).balanceOf(msg.sender), "NOT_ENOUGH_LXP");
         updateGlobalCache();
         updateUserCache(msg.sender);
         uint256 possibleUnstakeAmount = _userProfile[msg.sender].nextCycleStake;
+        require(amount <= possibleUnstakeAmount, "NOT_ENOUGH_STAKED");
         if (possibleUnstakeAmount > 0) {
-            // todo: throws Integer overflow error if `amount` larger than what was staked. require line above doesn't work
             _totalNextCycleStakeAmount -= amount;
             _userProfile[msg.sender].nextCycleAvailableUnstake += amount;
             _userProfile[msg.sender].nextCycleStake -= amount;
