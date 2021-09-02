@@ -434,6 +434,11 @@ def test_request_unstake(LX, LXP, sythetic_delegation, accounts, chain, stub):
     init_cycle = sythetic_delegation.getCurrentCycle()
     sythetic_delegation.updateUserCache(user, {'from': user})
 
+    balance = LXP.balanceOf(user, {'from': user})
+    if balance > 0: 
+        LXP.transfer(admin, balance, {'from': user})
+    assert LXP.balanceOf(user, {'from': user}) == 0
+
     # stake
     stake_amount = 2 * 10**18
     unstake_amount = 1 * 10**18
@@ -444,8 +449,8 @@ def test_request_unstake(LX, LXP, sythetic_delegation, accounts, chain, stub):
     assert sythetic_delegation.getUserNextCycleStake(user) == stake_amount
     assert sythetic_delegation.getUserNextCycleAvailableUnstake(user) == 0
 
-    # TODO: contract fails with Integer overflow, why require not fails?
     # can't request more than staked
+    assert LXP.balanceOf(user, {'from': user}) == stake_amount
     with brownie.reverts("NOT_ENOUGH_LXP"):
         sythetic_delegation.requestToUnstakeInTheNextCycle(stake_amount + 1, {'from': user})
 
@@ -483,3 +488,68 @@ def test_request_unstake(LX, LXP, sythetic_delegation, accounts, chain, stub):
     assert sythetic_delegation.getUserCurrentCycleAvailableUnstake(user) == 0
     assert sythetic_delegation.getUserNextCycleStake(user) == stake_amount - unstake_amount
     assert sythetic_delegation.getUserNextCycleAvailableUnstake(user) == 0
+
+# SyntheticDelegaction contract doesn't support transferring LXP tokens. This test checks that.
+def test_transferred_lpx(LX, LXP, sythetic_delegation, accounts, chain, stub):    
+    chain.sleep(1)  # brownie bug
+    admin = accounts[0]
+    user1 = accounts[1]
+    user2 = accounts[2]
+
+    # provide lp tokens
+    delegation_balance = 100 * 10**18
+    LXP.transfer(sythetic_delegation.address, delegation_balance, {'from': admin})    
+
+    # make sure users initially don't have any LXP
+    balance = LXP.balanceOf(user1, {'from': user1})
+    if balance > 0: 
+        LXP.transfer(admin, balance, {'from': user1})
+    balance = LXP.balanceOf(user2, {'from': user2})
+    if balance > 0: 
+        LXP.transfer(admin, balance, {'from': user2})
+    assert LXP.balanceOf(user1, {'from': user1}) == 0
+    assert LXP.balanceOf(user2, {'from': user2}) == 0
+
+    # init
+    init_cycle = sythetic_delegation.getCurrentCycle()
+    sythetic_delegation.updateUserCache(user1, {'from': user1})
+    sythetic_delegation.updateUserCache(user2, {'from': user2})
+
+    # user1 stakes
+    stake_amount = 2 * 10**18
+    LX.approve(sythetic_delegation.address, stake_amount, {'from': user1})
+    sythetic_delegation.stake(stake_amount, {'from': user1})
+
+    assert sythetic_delegation.getUserCurrentCycleAvailableUnstake(user1) == 0
+    assert sythetic_delegation.getUserCurrentCycleAvailableUnstake(user2) == 0
+    assert sythetic_delegation.getUserNextCycleStake(user1) == stake_amount
+    assert sythetic_delegation.getUserNextCycleStake(user2) == 0
+    assert sythetic_delegation.getUserNextCycleAvailableUnstake(user1) == 0
+    assert sythetic_delegation.getUserNextCycleAvailableUnstake(user2) == 0
+
+    # transfer LXP tokens
+    LXP.transfer(user2, stake_amount, {'from': user1})
+    assert LXP.balanceOf(user1, {'from': user1}) == 0
+    assert LXP.balanceOf(user2, {'from': user2}) == stake_amount
+
+    # sleep until next cycle    
+    chain.sleep(14 * 24 * 3600)  # sleep 2 weeks
+    stub.inc()  # force new block
+    sythetic_delegation.updateGlobalCache()
+    sythetic_delegation.updateUserCache(user1, {'from': user1})
+    sythetic_delegation.updateUserCache(user2, {'from': user2})
+    assert sythetic_delegation.getCurrentCycle() == init_cycle + 1
+
+    # user1 can't request or unstake because don't have LXP tokens anymore
+    LXP.approve(sythetic_delegation.address, stake_amount, {'from': user1})
+    with brownie.reverts("NOT_ENOUGH_LXP"):
+        sythetic_delegation.requestToUnstakeInTheNextCycle(stake_amount, {'from': user1})
+    with brownie.reverts("not enough unfrozen LXP in current cycle"):
+        sythetic_delegation.unstake(stake_amount, {'from': user1})
+
+    # user2 can't request or unstake
+    LXP.approve(sythetic_delegation.address, stake_amount, {'from': user2})
+    with brownie.reverts("NOT_ENOUGH_STAKED"):
+        sythetic_delegation.requestToUnstakeInTheNextCycle(stake_amount, {'from': user2})
+    with brownie.reverts("not enough unfrozen LXP in current cycle"):
+        sythetic_delegation.unstake(stake_amount, {'from': user2})
