@@ -58,12 +58,14 @@ contract SyntheticDelegation is ReentrancyGuard, Initializable {
     event UserCacheUpdated(address indexed caller, address indexed user, uint256 previousCycle, uint256 indexed currentCycle);
     event UserCyclePayout(address indexed caller, address indexed user, uint256 indexed cycle, uint256 payout);
 
-    function getUserTotalStake(address user) requireUpdatedGlobalCache requireUpdatedUserCache(user) external view returns(uint256) {
+    function getUserTotalStake(address user) external view returns(uint256) {
         return _userProfile[user].nextCycleStake;
     }
 
-    function getUserCurrentCycleAvailableUnstake(address user) requireUpdatedUserCache(user) requireUpdatedGlobalCache external view returns(uint256) {
-        return _userProfile[user].currentCycleAvailableUnstake;
+    function getUserCurrentCycleAvailableUnstake(address user) external view returns(uint256) {
+        uint256 current = getCurrentCycle();
+        UserProfile memory profile = _userProfile[user];
+        return (current == profile.cacheCycle) ? profile.currentCycleAvailableUnstake : profile.nextCycleAvailableUnstake;
     }
 
     function getUserCacheCycle(address user) external view returns(uint256) {
@@ -74,18 +76,18 @@ contract SyntheticDelegation is ReentrancyGuard, Initializable {
         return _globalCacheCycle;
     }
 
-    function cycleRewardsOfUser(uint256 cycle, address user) requireUpdatedUserCache(user) external view returns(uint256){
+    function cycleRewardsOfUser(address user, uint256 cycle) external view returns(uint256){
         uint256 current = getCurrentCycle();
         UserProfile storage profile = _userProfile[user];
-        if (profile.cacheCycle == 0) {
-            return 0;
-        }
         if (cycle == current) {
-            return _cycleTotalReward[cycle] * profile.currentCycleStake / _cycleTotalStaked[cycle];
+            uint256 _cycleTotalStaked_cycle = (current == _globalCacheCycle) ? _cycleTotalStaked[current] : _totalNextCycleStakeAmount;
+            if (_cycleTotalStaked_cycle == 0) {return 0;}
+            uint256 profile_currentCycleStake = (current == profile.cacheCycle) ? profile.currentCycleStake : profile.nextCycleStake;
+            return _cycleTotalReward[cycle] * profile_currentCycleStake / _cycleTotalStaked_cycle;
         } else if (cycle > current) {
+            if (_totalNextCycleStakeAmount == 0) {return 0;}
             return _cycleTotalReward[cycle] * profile.nextCycleStake / _totalNextCycleStakeAmount;
-        } else {
-            assert(cycle < current);
+        } else {  // cycle < current
             revert("SC does not remember past user stake");
         }
     }
@@ -98,7 +100,7 @@ contract SyntheticDelegation is ReentrancyGuard, Initializable {
         return _userProfile[user];
     }
 
-    function getClaimableRewardOfUserForNow(address user) requireUpdatedGlobalCache external view returns(uint256){  //todo tests
+    function getClaimableRewardOfUserForNow(address user) external view returns(uint256){  //todo tests
         uint256 current = getCurrentCycle();
         UserProfile storage profile = _userProfile[user];
         if (profile.cacheCycle == 0) {
@@ -107,9 +109,10 @@ contract SyntheticDelegation is ReentrancyGuard, Initializable {
         uint256 reward = 0;
         if (current > profile.cacheCycle) {
             for (uint256 i = profile.cacheCycle; i < current; i++) {
+                uint256 _cycleTotalStaked_cycle = (i <= _globalCacheCycle) ? _cycleTotalStaked[i] : _totalNextCycleStakeAmount;
                 uint256 cycleStake = (i == profile.cacheCycle) ? profile.currentCycleStake : profile.nextCycleStake;
-                if (_cycleTotalStaked[i] > 0) {
-                    reward += _cycleTotalReward[i] * cycleStake / _cycleTotalStaked[i];
+                if (_cycleTotalStaked_cycle > 0) {
+                    reward += _cycleTotalReward[i] * cycleStake / _cycleTotalStaked_cycle;
                 }
             }
         }
@@ -129,16 +132,6 @@ contract SyntheticDelegation is ReentrancyGuard, Initializable {
         return (block.timestamp - FIRST_MONDAY) % WINDOW;
     }
 
-    modifier requireUpdatedGlobalCache() {
-        require(getCurrentCycle() == _globalCacheCycle, "update global cache");
-        _;
-    }
-
-    modifier requireUpdatedUserCache(address user) {
-        require(getCurrentCycle() == _userProfile[user].cacheCycle, "update user cache");
-        _;
-    }
-
     function updateGlobalCache() public {
         uint256 current = getCurrentCycle();
         if (_globalCacheCycle == 0) {
@@ -155,19 +148,6 @@ contract SyntheticDelegation is ReentrancyGuard, Initializable {
             _totalCurrentCycleStakeAmount = _totalNextCycleStakeAmount;
         }
     }
-
-    // todo
-//    function updateGlobalCacheCycleLimited(uint256 maxIterations) public {
-//        uint256 current = getCurrentCycle();
-//        if (current > _globalCacheCycle) {
-//            emit GlobalCacheUpdated(msg.sender, _globalCacheCycle, current);
-//            for (uint256 i = _globalCacheCycle+1; i < current; i++) {
-//                _cycleTotalStaked[i] = _totalNextCycleStakeAmount;
-//            }
-//            _globalCacheCycle = current;
-//            _totalCurrentCycleStakeAmount = _totalNextCycleStakeAmount;
-//        }
-//    }
 
     function updateUserCache(address user) public {
         uint256 current = getCurrentCycle();
@@ -218,11 +198,11 @@ contract SyntheticDelegation is ReentrancyGuard, Initializable {
         IERC20(LXP).safeTransfer(msg.sender, amount);
     }
 
-    function getUserNextCycleStake(address user) requireUpdatedUserCache(user) external view returns(uint256) {
+    function getUserNextCycleStake(address user) external view returns(uint256) {
         return _userProfile[user].nextCycleStake;
     }
 
-    function getUserNextCycleAvailableUnstake(address user) requireUpdatedUserCache(user) external view returns(uint256) {
+    function getUserNextCycleAvailableUnstake(address user) external view returns(uint256) {
         return _userProfile[user].nextCycleAvailableUnstake;
     }
 

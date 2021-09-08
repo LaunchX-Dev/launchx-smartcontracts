@@ -105,12 +105,14 @@ class UserProfile(TypedDict):
 
 
 def get_profile(sc, user):
-    attrs = ['currentCycleStake',
-    'nextCycleStake',
-    'currentCycleAvailableUnstake',
-    'nextCycleAvailableUnstake',
-    'cacheCycle',
-    'currentCycleClaimed',]
+    attrs = [
+        'currentCycleStake',
+        'nextCycleStake',
+        'currentCycleAvailableUnstake',
+        'nextCycleAvailableUnstake',
+        'cacheCycle',
+        'currentCycleClaimed',
+    ]
     return UserProfile(zip(attrs, sc.getProfile(user)))
 
 
@@ -149,6 +151,15 @@ def test_reward(LX, LXP, sythetic_delegation, accounts, chain, stub):
     assert sythetic_delegation.getClaimableRewardOfUserForNow(user1) == 0
     assert sythetic_delegation.getClaimableRewardOfUserForNow(user2) == 0
 
+    with brownie.reverts("SC does not remember past user stake"):
+        sythetic_delegation.cycleRewardsOfUser(user1, cycle-1)
+    with brownie.reverts("SC does not remember past user stake"):
+        sythetic_delegation.cycleRewardsOfUser(user2, cycle-1)
+    assert sythetic_delegation.cycleRewardsOfUser(user1, cycle) == 0
+    assert sythetic_delegation.cycleRewardsOfUser(user2, cycle) == 0
+    assert sythetic_delegation.cycleRewardsOfUser(user1, cycle+1) == 0
+    assert sythetic_delegation.cycleRewardsOfUser(user2, cycle+1) == 0
+
     LX.approve(sythetic_delegation.address, reward_amount, {'from': admin})
     with brownie.reverts("require: cycle > getCurrentCycle()"):
         sythetic_delegation.shareReward(reward_amount, cycle, {'from': admin})
@@ -166,6 +177,18 @@ def test_reward(LX, LXP, sythetic_delegation, accounts, chain, stub):
     assert sythetic_delegation.getTotalNextCycleStakeAmount() == stake1 + stake2
     assert sythetic_delegation.getTotalCurrentCycleStakeAmount() == stake1 + stake2  # before update cache
 
+    with brownie.reverts("SC does not remember past user stake"):
+        sythetic_delegation.cycleRewardsOfUser(user1, cycle-1)
+    with brownie.reverts("SC does not remember past user stake"):
+        sythetic_delegation.cycleRewardsOfUser(user2, cycle-1)
+    with brownie.reverts("SC does not remember past user stake"):
+        sythetic_delegation.cycleRewardsOfUser(user1, cycle)
+    with brownie.reverts("SC does not remember past user stake"):
+        sythetic_delegation.cycleRewardsOfUser(user2, cycle)
+    assert sythetic_delegation.getCurrentCycle() == cycle + 1
+    assert sythetic_delegation.cycleRewardsOfUser(user1, cycle+1) == int(reward_amount * stake1 / (stake1 + stake2))-1  # rounding down
+    assert sythetic_delegation.cycleRewardsOfUser(user2, cycle+1) == int(reward_amount * stake2 / (stake1 + stake2))
+
     profile1 = get_profile(sythetic_delegation, user1)
     profile2 = get_profile(sythetic_delegation, user2)
 
@@ -173,6 +196,11 @@ def test_reward(LX, LXP, sythetic_delegation, accounts, chain, stub):
     assert profile1['cacheCycle'] == sythetic_delegation.getCurrentCycle() - 1
     assert profile1['currentCycleStake'] == 0
     assert profile1['nextCycleStake'] == stake1
+
+    # not updated yet
+    assert profile2['cacheCycle'] == sythetic_delegation.getCurrentCycle() - 1
+    assert profile2['currentCycleStake'] == 0
+    assert profile2['nextCycleStake'] == stake2
 
     assert sythetic_delegation.raw_cycleTotalReward(sythetic_delegation.getCurrentCycle()) == reward_amount
 
@@ -224,14 +252,14 @@ def test_reward(LX, LXP, sythetic_delegation, accounts, chain, stub):
     assert LX.balanceOf(user2) - balanceBefore2 == 0
 
 
-# Tests that users can't unstake before staking period, during staking period, 
+# Tests that users can't unstake before staking period, during staking period,
 # during staking period after requesting, after staking period more than requested.
 def test_illegal_unstaking(LX, LXP, sythetic_delegation, accounts, chain, stub):
     chain.sleep(1)  # brownie bug
     admin = accounts[0]
     user1 = accounts[1]
     user2 = accounts[2]
-    
+
     init_cycle = sythetic_delegation.getCurrentCycle()
 
     # provide lp tokens
@@ -406,7 +434,7 @@ def test_illegal_unstaking(LX, LXP, sythetic_delegation, accounts, chain, stub):
         sythetic_delegation.unstake(2, {'from': user1})
     with brownie.reverts("not enough unfrozen LXP in current cycle"):
         sythetic_delegation.unstake(2, {'from': user2})
-    
+
     # can unstake what requested
     sythetic_delegation.unstake(1, {'from': user1})
     sythetic_delegation.unstake(1, {'from': user2})
@@ -428,14 +456,14 @@ def test_request_unstake(LX, LXP, sythetic_delegation, accounts, chain, stub):
 
     # provide lp tokens
     delegation_balance = 100 * 10**18
-    LXP.transfer(sythetic_delegation.address, delegation_balance, {'from': admin})    
+    LXP.transfer(sythetic_delegation.address, delegation_balance, {'from': admin})
 
     # init
     init_cycle = sythetic_delegation.getCurrentCycle()
     sythetic_delegation.updateUserCache(user, {'from': user})
 
     balance = LXP.balanceOf(user, {'from': user})
-    if balance > 0: 
+    if balance > 0:
         LXP.transfer(admin, balance, {'from': user})
     assert LXP.balanceOf(user, {'from': user}) == 0
 
@@ -457,7 +485,7 @@ def test_request_unstake(LX, LXP, sythetic_delegation, accounts, chain, stub):
     # request to unstake
     LXP.approve(sythetic_delegation.address, unstake_amount, {'from': user})
     sythetic_delegation.requestToUnstakeInTheNextCycle(unstake_amount, {'from': user})
-    
+
     assert sythetic_delegation.getUserCurrentCycleAvailableUnstake(user) == 0
     assert sythetic_delegation.getUserNextCycleStake(user) == stake_amount - unstake_amount
     assert sythetic_delegation.getUserNextCycleAvailableUnstake(user) == unstake_amount
@@ -466,13 +494,13 @@ def test_request_unstake(LX, LXP, sythetic_delegation, accounts, chain, stub):
     with brownie.reverts("not enough unfrozen LXP in current cycle"):
         sythetic_delegation.unstake(stake_amount, {'from': user})
 
-    # sleep until next cycle    
+    # sleep until next cycle
     chain.sleep(14 * 24 * 3600)  # sleep 2 weeks
     stub.inc()  # force new block
     sythetic_delegation.updateGlobalCache()
     sythetic_delegation.updateUserCache(user, {'from': user})
     assert sythetic_delegation.getCurrentCycle() == init_cycle + 1
-    
+
     assert sythetic_delegation.getUserCurrentCycleAvailableUnstake(user) == unstake_amount
     assert sythetic_delegation.getUserNextCycleStake(user) == stake_amount - unstake_amount
     assert sythetic_delegation.getUserNextCycleAvailableUnstake(user) == unstake_amount
@@ -483,14 +511,14 @@ def test_request_unstake(LX, LXP, sythetic_delegation, accounts, chain, stub):
 
     # unstake
     sythetic_delegation.unstake(unstake_amount, {'from': user})
-    
+
     # check
     assert sythetic_delegation.getUserCurrentCycleAvailableUnstake(user) == 0
     assert sythetic_delegation.getUserNextCycleStake(user) == stake_amount - unstake_amount
     assert sythetic_delegation.getUserNextCycleAvailableUnstake(user) == 0
 
 # SyntheticDelegaction contract doesn't support transferring LXP tokens. This test checks that.
-def test_transferred_lpx(LX, LXP, sythetic_delegation, accounts, chain, stub):    
+def test_transferred_lpx(LX, LXP, sythetic_delegation, accounts, chain, stub):
     chain.sleep(1)  # brownie bug
     admin = accounts[0]
     user1 = accounts[1]
@@ -498,14 +526,14 @@ def test_transferred_lpx(LX, LXP, sythetic_delegation, accounts, chain, stub):
 
     # provide lp tokens
     delegation_balance = 100 * 10**18
-    LXP.transfer(sythetic_delegation.address, delegation_balance, {'from': admin})    
+    LXP.transfer(sythetic_delegation.address, delegation_balance, {'from': admin})
 
     # make sure users initially don't have any LXP
     balance = LXP.balanceOf(user1, {'from': user1})
-    if balance > 0: 
+    if balance > 0:
         LXP.transfer(admin, balance, {'from': user1})
     balance = LXP.balanceOf(user2, {'from': user2})
-    if balance > 0: 
+    if balance > 0:
         LXP.transfer(admin, balance, {'from': user2})
     assert LXP.balanceOf(user1, {'from': user1}) == 0
     assert LXP.balanceOf(user2, {'from': user2}) == 0
@@ -532,7 +560,7 @@ def test_transferred_lpx(LX, LXP, sythetic_delegation, accounts, chain, stub):
     assert LXP.balanceOf(user1, {'from': user1}) == 0
     assert LXP.balanceOf(user2, {'from': user2}) == stake_amount
 
-    # sleep until next cycle    
+    # sleep until next cycle
     chain.sleep(14 * 24 * 3600)  # sleep 2 weeks
     stub.inc()  # force new block
     sythetic_delegation.updateGlobalCache()
