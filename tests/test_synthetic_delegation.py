@@ -202,8 +202,12 @@ def test_reward(LX, LXP, sythetic_delegation, accounts, chain, stub):
 
     assert sythetic_delegation.raw_cycleTotalReward(sythetic_delegation.getCurrentCycle()) == reward_amount
 
-    assert sythetic_delegation.getClaimableRewardOfUserForNow(user1) == int(reward_amount * stake1 / (stake1 + stake2))
-    assert sythetic_delegation.getClaimableRewardOfUserForNow(user2) == int(reward_amount * stake1 / (stake1 + stake2))
+    # tx = sythetic_delegation.getClaimableRewardOfUserForNow2(user1)
+    # import pprint
+    # pprint.pprint(tx.events['E1'])
+
+    assert sythetic_delegation.getClaimableRewardOfUserForNow(user1) == int(reward_amount * stake1 // (stake1 + stake2))
+    assert sythetic_delegation.getClaimableRewardOfUserForNow(user2) == int(reward_amount * stake2 // (stake1 + stake2))
 
     sythetic_delegation.updateGlobalCache()
     assert sythetic_delegation.raw_cycleTotalReward(sythetic_delegation.getCurrentCycle() - 1) == 0
@@ -212,9 +216,6 @@ def test_reward(LX, LXP, sythetic_delegation, accounts, chain, stub):
     assert sythetic_delegation.raw_cycleTotalStaked(sythetic_delegation.getCurrentCycle()) == stake1 + stake2
     assert sythetic_delegation.raw_cycleTotalReward(sythetic_delegation.getCurrentCycle()+1) == 0
     assert sythetic_delegation.raw_cycleTotalStaked(sythetic_delegation.getCurrentCycle()+1) == 0
-
-    assert sythetic_delegation.getClaimableRewardOfUserForNow(user1) == 0
-    assert sythetic_delegation.getClaimableRewardOfUserForNow(user2) == 0
 
     chain.sleep(14 * 24 * 3600)  # sleep 2 weeks
     stub.inc()  # force new block
