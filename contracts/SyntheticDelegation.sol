@@ -30,7 +30,6 @@ contract SyntheticDelegation is ReentrancyGuard, Initializable {
         uint256 currentCycleAvailableUnstake;
         uint256 nextCycleAvailableUnstake;
         uint256 cacheCycle;
-        uint256 currentCycleClaimed;
     }
 
     function getTotalCurrentCycleStakeAmount() external view returns(uint256){
@@ -50,6 +49,7 @@ contract SyntheticDelegation is ReentrancyGuard, Initializable {
 
     address public LX;
     address public LXP;
+    uint256 public firstCycle;
 
     event RewardShared(address user, uint256 amount);
     event Stake(address user, uint256 amount);
@@ -59,16 +59,14 @@ contract SyntheticDelegation is ReentrancyGuard, Initializable {
     event UserCacheUpdated(address indexed caller, address indexed user, uint256 previousCycle, uint256 indexed currentCycle);
     event UserCyclePayout(address indexed caller, address indexed user, uint256 indexed cycle, uint256 payout);
 
-    function getTotalTokensStaked() view external returns(uint256){
-        return _totalNextCycleStakeAmount;
-    }
-
-    function getUserTotalStake(address user) requireUpdatedGlobalCache requireUpdatedUserCache(user) external view returns(uint256) {
+    function getUserTotalStake(address user) external view returns(uint256) {
         return _userProfile[user].nextCycleStake;
     }
 
-    function getUserCurrentCycleAvailableUnstake(address user) requireUpdatedUserCache(user) requireUpdatedGlobalCache external view returns(uint256) {
-        return _userProfile[user].currentCycleAvailableUnstake;
+    function getUserCurrentCycleAvailableUnstake(address user) external view returns(uint256) {
+        uint256 current = getCurrentCycle();
+        UserProfile memory profile = _userProfile[user];
+        return (current == profile.cacheCycle) ? profile.currentCycleAvailableUnstake : profile.nextCycleAvailableUnstake;
     }
 
     function getUserCacheCycle(address user) external view returns(uint256) {
@@ -79,18 +77,18 @@ contract SyntheticDelegation is ReentrancyGuard, Initializable {
         return _globalCacheCycle;
     }
 
-    function cycleRewardsOfUser(uint256 cycle, address user) requireUpdatedUserCache(user) external view returns(uint256){
+    function cycleRewardsOfUser(address user, uint256 cycle) external view returns(uint256){
         uint256 current = getCurrentCycle();
         UserProfile storage profile = _userProfile[user];
-        if (profile.cacheCycle == 0) {
-            return 0;
-        }
         if (cycle == current) {
-            return _cycleTotalReward[cycle] * profile.currentCycleStake / _cycleTotalStaked[cycle];
+            uint256 _cycleTotalStaked_cycle = (current == _globalCacheCycle) ? _cycleTotalStaked[current] : _totalNextCycleStakeAmount;
+            if (_cycleTotalStaked_cycle == 0) {return 0;}
+            uint256 profile_currentCycleStake = (current == profile.cacheCycle) ? profile.currentCycleStake : profile.nextCycleStake;
+            return _cycleTotalReward[cycle] * profile_currentCycleStake / _cycleTotalStaked_cycle;
         } else if (cycle > current) {
+            if (_totalNextCycleStakeAmount == 0) {return 0;}
             return _cycleTotalReward[cycle] * profile.nextCycleStake / _totalNextCycleStakeAmount;
-        } else {
-            assert(cycle < current);
+        } else {  // cycle < current
             revert("SC does not remember past user stake");
         }
     }
@@ -103,28 +101,49 @@ contract SyntheticDelegation is ReentrancyGuard, Initializable {
         return _userProfile[user];
     }
 
-    function getClaimableRewardOfUserForNow(address user) requireUpdatedGlobalCache external view returns(uint256){  //todo tests
+    event E1(string name, uint256 value);
+    function getClaimableRewardOfUserForNow2(address user) external returns(uint256){
+        uint256 current = getCurrentCycle();
+        emit E1("current", current);
+        UserProfile storage profile = _userProfile[user];
+        uint256 start_profile_cacheCycle = (profile.cacheCycle > 0) ? profile.cacheCycle : firstCycle;
+        emit E1("profile.cacheCycle", profile.cacheCycle);
+        emit E1("firstCycle", firstCycle);
+        emit E1("start_profile_cacheCycle", start_profile_cacheCycle);
+
+        uint256 reward = 0;
+        for (uint256 i = start_profile_cacheCycle; i <= current; i++) {
+            emit E1("i", i);
+            uint256 _cycleTotalStaked_cycle = (i <= _globalCacheCycle) ? _cycleTotalStaked[i] : _totalNextCycleStakeAmount;
+            emit E1("_globalCacheCycle", _globalCacheCycle);
+            emit E1("_cycleTotalStaked[i]", _cycleTotalStaked[i]);
+            emit E1("_totalNextCycleStakeAmount", _totalNextCycleStakeAmount);
+            emit E1("_cycleTotalStaked_cycle", _cycleTotalStaked_cycle);
+
+            uint256 cycleStake = (i == profile.cacheCycle) ? profile.currentCycleStake : profile.nextCycleStake;
+            emit E1("profile.cacheCycle", profile.cacheCycle);
+            emit E1("profile.currentCycleStake", profile.currentCycleStake);
+            emit E1("profile.nextCycleStake", profile.nextCycleStake);
+
+            if (_cycleTotalStaked_cycle > 0) {
+                uint r = _cycleTotalReward[i] * cycleStake / _cycleTotalStaked_cycle;
+                emit E1("delta reward", r);
+                reward += r;
+            }
+        }
+        return reward;
+    }
+
+    function getClaimableRewardOfUserForNow(address user) external view returns(uint256){
         uint256 current = getCurrentCycle();
         UserProfile storage profile = _userProfile[user];
-        if (profile.cacheCycle == 0) {
-            return 0;
-        }
+        uint256 start_profile_cacheCycle = (profile.cacheCycle > 0) ? profile.cacheCycle : firstCycle;
         uint256 reward = 0;
-        if (current > profile.cacheCycle) {
-            uint256 currentCycleStake = profile.currentCycleStake;
-            uint256 nextCycleStake = profile.nextCycleStake;
-            uint256 currentCycleClaimed = profile.currentCycleClaimed;
-            for (uint256 i = profile.cacheCycle; i < current; i++) {
-                if (_cycleTotalStaked[i] > 0) {
-                    uint256 iReward = (_cycleTotalReward[i] * currentCycleStake / _cycleTotalStaked[i]
-                        - currentCycleClaimed);
-                    currentCycleClaimed += iReward;
-                    if (iReward > 0) {
-                        reward += iReward;
-                    }
-                }
-                currentCycleStake = nextCycleStake;
-                currentCycleClaimed = 0;
+        for (uint256 i = start_profile_cacheCycle; i <= current; i++) {
+            uint256 _cycleTotalStaked_cycle = (i <= _globalCacheCycle) ? _cycleTotalStaked[i] : _totalNextCycleStakeAmount;
+            uint256 cycleStake = (i == profile.cacheCycle) ? profile.currentCycleStake : profile.nextCycleStake;
+            if (_cycleTotalStaked_cycle > 0) {
+                reward += _cycleTotalReward[i] * cycleStake / _cycleTotalStaked_cycle;
             }
         }
         return reward;
@@ -133,6 +152,7 @@ contract SyntheticDelegation is ReentrancyGuard, Initializable {
     function initialize(address _LX, address _LXP) external initializer {
         LX = _LX;
         LXP = _LXP;
+        firstCycle = getCurrentCycle();
     }
 
     function getCurrentCycle() view public returns(uint256) {
@@ -141,16 +161,6 @@ contract SyntheticDelegation is ReentrancyGuard, Initializable {
 
     function timeFromCycleStart() view public returns(uint256) {
         return (block.timestamp - FIRST_MONDAY) % WINDOW;
-    }
-
-    modifier requireUpdatedGlobalCache() {
-        require(getCurrentCycle() == _globalCacheCycle, "update global cache");
-        _;
-    }
-
-    modifier requireUpdatedUserCache(address user) {
-        require(getCurrentCycle() == _userProfile[user].cacheCycle, "update user cache");
-        _;
     }
 
     function updateGlobalCache() public {
@@ -170,19 +180,6 @@ contract SyntheticDelegation is ReentrancyGuard, Initializable {
         }
     }
 
-    // todo
-//    function updateGlobalCacheCycleLimited(uint256 maxIterations) public {
-//        uint256 current = getCurrentCycle();
-//        if (current > _globalCacheCycle) {
-//            emit GlobalCacheUpdated(msg.sender, _globalCacheCycle, current);
-//            for (uint256 i = _globalCacheCycle+1; i < current; i++) {
-//                _cycleTotalStaked[i] = _totalNextCycleStakeAmount;
-//            }
-//            _globalCacheCycle = current;
-//            _totalCurrentCycleStakeAmount = _totalNextCycleStakeAmount;
-//        }
-//    }
-
     function updateUserCache(address user) public {
         uint256 current = getCurrentCycle();
         UserProfile storage profile = _userProfile[user];
@@ -196,19 +193,17 @@ contract SyntheticDelegation is ReentrancyGuard, Initializable {
             uint256 reward;
             for (uint256 i = profile.cacheCycle; i < current; i++) {
                 if (_cycleTotalStaked[i] > 0) {
-                    uint256 iReward = (_cycleTotalReward[i] * profile.currentCycleStake / _cycleTotalStaked[i]
-                        - profile.currentCycleClaimed);
-                    profile.currentCycleClaimed += iReward;
+                    uint256 cycleStaked = (i == profile.cacheCycle) ? profile.currentCycleStake : profile.nextCycleStake;
+                    uint256 iReward = _cycleTotalReward[i] * cycleStaked / _cycleTotalStaked[i];
                     if (iReward > 0) {
                         reward += iReward;
                         emit UserCyclePayout(msg.sender, user, i, iReward);
                     }
-                }
-                profile.cacheCycle = i+1;
-                profile.currentCycleStake = profile.nextCycleStake;
-                profile.currentCycleAvailableUnstake = profile.nextCycleAvailableUnstake;
-                profile.currentCycleClaimed = 0;
+                }  
             }
+            profile.cacheCycle = current;
+            profile.currentCycleStake = profile.nextCycleStake;
+            profile.currentCycleAvailableUnstake = profile.nextCycleAvailableUnstake;
             if (reward > 0) {
                 IERC20(LX).safeTransfer(user, reward);
             }
@@ -234,20 +229,23 @@ contract SyntheticDelegation is ReentrancyGuard, Initializable {
         IERC20(LXP).safeTransfer(msg.sender, amount);
     }
 
-    function getUserNextCycleStake(address user) requireUpdatedUserCache(user) external view returns(uint256) {
+    function getUserNextCycleStake(address user) external view returns(uint256) {
         return _userProfile[user].nextCycleStake;
     }
 
-    function getUserNextCycleAvailableUnstake(address user) requireUpdatedUserCache(user) external view returns(uint256) {
+    function getUserNextCycleAvailableUnstake(address user) external view returns(uint256) {
         return _userProfile[user].nextCycleAvailableUnstake;
     }
 
+    /// @notice A user can't request and unstake more than staked from their address by transferring LXP tokens.
     function requestToUnstakeInTheNextCycle(uint256 amount) external nonReentrant {
         require(amount <= IERC20(LXP).balanceOf(msg.sender), "NOT_ENOUGH_LXP");
         updateGlobalCache();
         updateUserCache(msg.sender);
         uint256 possibleUnstakeAmount = _userProfile[msg.sender].nextCycleStake;
+        require(amount <= possibleUnstakeAmount, "NOT_ENOUGH_STAKED");
         if (possibleUnstakeAmount > 0) {
+            _totalNextCycleStakeAmount -= amount;
             _userProfile[msg.sender].nextCycleAvailableUnstake += amount;
             _userProfile[msg.sender].nextCycleStake -= amount;
             emit Claim(msg.sender, amount);
